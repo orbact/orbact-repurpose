@@ -1,13 +1,16 @@
 'use client'
-
+import QuoteCard from './quote-card'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+
+type QuoteImageState = { imageDataUrl: string | null; error: string | null }
 
 export default function ExtractTest() {
   const [type, setType] = useState<'url' | 'text' | 'youtube'>('url')
   const [input, setInput] = useState('')
   const [extracted, setExtracted] = useState<any>(null)
   const [outputs, setOutputs] = useState<any>(null)
+  const [quoteImages, setQuoteImages] = useState<QuoteImageState[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState<'idle' | 'extracting' | 'generating'>('idle')
   const router = useRouter()
@@ -17,6 +20,7 @@ export default function ExtractTest() {
     setError(null)
     setExtracted(null)
     setOutputs(null)
+    setQuoteImages([])
 
     const res = await fetch('/api/extract', {
       method: 'POST',
@@ -34,10 +38,47 @@ export default function ExtractTest() {
     setLoading('idle')
   }
 
+  async function generateQuoteImages(quotes: string[], theme: string) {
+    setQuoteImages(quotes.map(() => ({ imageDataUrl: null, error: null })))
+
+    // Sequential on purpose — Pollinations rate-limits concurrent requests
+    // from the same server, so we process one image at a time.
+    for (let i = 0; i < quotes.length; i++) {
+      try {
+        const res = await fetch('/api/quote-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: `abstract minimal background, ${theme}, dark moody gradient, no text, no words, no letters`,
+            seed: i + 1,
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error)
+
+        setQuoteImages((prev) => {
+          const next = [...prev]
+          next[i] = { imageDataUrl: data.imageDataUrl, error: null }
+          return next
+        })
+      } catch (err) {
+        setQuoteImages((prev) => {
+          const next = [...prev]
+          next[i] = {
+            imageDataUrl: null,
+            error: err instanceof Error ? err.message : 'Failed',
+          }
+          return next
+        })
+      }
+    }
+  }
+
   async function handleGenerate() {
     setLoading('generating')
     setError(null)
     setOutputs(null)
+    setQuoteImages([])
 
     const res = await fetch('/api/generate', {
       method: 'POST',
@@ -57,6 +98,8 @@ export default function ExtractTest() {
     }
     setOutputs(data.outputs)
     router.refresh() // refreshes the server-rendered usage count above
+
+    generateQuoteImages(data.outputs.quote_highlights, extracted.title)
   }
 
   return (
@@ -110,6 +153,18 @@ export default function ExtractTest() {
               <li key={i}>{q}</li>
             ))}
           </ul>
+
+          <h3>Quote Card Images</h3>
+          <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+            {outputs.quote_highlights.map((q: string, i: number) => (
+              <QuoteCard
+                key={i}
+                quote={q}
+                imageDataUrl={quoteImages[i]?.imageDataUrl ?? null}
+                error={quoteImages[i]?.error ?? null}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>
