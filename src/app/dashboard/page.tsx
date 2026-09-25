@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import ExtractTest from './extract-test'
-import UpgradeButtons from './upgrade-buttons'
+import { UpgradeButtons, ManageBillingButton } from './upgrade-buttons'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -22,11 +22,9 @@ export default async function DashboardPage() {
       <p>Plan: {profile?.plan}</p>
       <p>Generations used: {profile?.generations_used} / {profile?.generations_limit}</p>
 
-      {profile?.plan === 'free' && (
-        <div style={{ marginTop: 20 }}>
-          <UpgradeButtons />
-        </div>
-      )}
+      <div style={{ marginTop: 20 }}>
+        {profile?.plan === 'free' ? <UpgradeButtons /> : <ManageBillingButton />}
+      </div>
 
       <ExtractTest />
     </div>

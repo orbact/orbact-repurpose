@@ -1,6 +1,6 @@
 'use client'
 
-export default function UpgradeButtons() {
+export function UpgradeButtons() {
   async function handleUpgrade(plan: 'starter' | 'pro') {
     const res = await fetch('/api/checkout', {
       method: 'POST',
@@ -19,4 +19,15 @@ export default function UpgradeButtons() {
       </button>
     </div>
   )
+}
+
+export function ManageBillingButton() {
+  async function handleManage() {
+    const res = await fetch('/api/billing-portal', { method: 'POST' })
+    const data = await res.json()
+    if (data.url) window.location.href = data.url
+    else alert(data.error || 'Could not open billing portal')
+  }
+
+  return <button onClick={handleManage}>Manage Billing</button>
 }
