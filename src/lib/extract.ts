@@ -3,7 +3,7 @@ import { Readability } from '@mozilla/readability'
 import { YoutubeTranscript } from 'youtube-transcript'
 import { assertSafeUrl } from './security/ssrf-guard'
 
-const MAX_INPUT_CHARS = 40000 // hard cap regardless of plan — refined per-plan in Step 6
+const MAX_INPUT_CHARS = 14000 // hard cap regardless of plan — refined per-plan in Step 6
 
 export type ExtractResult = {
   title: string
