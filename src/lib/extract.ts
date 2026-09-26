@@ -50,12 +50,19 @@ export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {
 }
 
 export async function extractFromYoutube(rawUrl: string): Promise<ExtractResult> {
-  const transcript = await fetchTranscript(rawUrl, {
-    userAgent:
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-  })
+  let transcript: Awaited<ReturnType<typeof fetchTranscript>>
+  try {
+    transcript = await fetchTranscript(rawUrl)
+  } catch {
+    throw new Error(
+      "Couldn't extract captions for this video — try pasting the transcript directly using the \"Pasted Text\" option instead."
+    )
+  }
+
   if (!transcript.length) {
-    throw new Error('No transcript/captions available for this video')
+    throw new Error(
+      "This video doesn't have accessible captions — try pasting the transcript directly using the \"Pasted Text\" option instead."
+    )
   }
   const text = transcript.map((t) => t.text).join(' ')
 
