@@ -1,3 +1,4 @@
+import { billingRateLimit } from '@/lib/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { stripe, PLAN_PRICES } from '@/lib/stripe'
@@ -7,6 +8,14 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { success } = await billingRateLimit.limit(user.id)
+  if (!success) {
+    return NextResponse.json(
+      { error: 'Too many requests — please slow down and try again in a minute.' },
+      { status: 429 }
+    )
   }
 
   const body = await req.json().catch(() => null)

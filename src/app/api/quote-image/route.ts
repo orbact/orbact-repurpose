@@ -1,3 +1,4 @@
+import { quoteImageRateLimit } from '@/lib/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
@@ -6,6 +7,14 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { success } = await quoteImageRateLimit.limit(user.id)
+  if (!success) {
+    return NextResponse.json(
+      { error: 'Too many requests — please slow down and try again in a minute.' },
+      { status: 429 }
+    )
   }
 
   const body = await req.json().catch(() => null)
@@ -38,7 +47,6 @@ export async function POST(req: NextRequest) {
 
       lastStatus = res.status
       if ((res.status === 429 || res.status === 500) && attempt < 2) {
-        // Exponential backoff: 1s, then 2s, before retrying
         await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)))
         continue
       }

@@ -16,17 +16,16 @@ export async function POST(req: NextRequest) {
   const { title, text, sourceType } = body as { title: string; text: string; sourceType: string }
 
   // Enforce usage limit BEFORE calling the AI — never spend money on a call you're going to reject
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('generations_used, generations_limit')
-    .eq('id', user.id)
-    .single()
+  const { data: allowed, error: consumeError } = await supabase.rpc(
+    'try_consume_generation',
+    { p_user_id: user.id }
+  )
 
-  if (profileError || !profile) {
-    return NextResponse.json({ error: 'Could not load profile' }, { status: 500 })
+  if (consumeError) {
+    return NextResponse.json({ error: 'Could not verify usage' }, { status: 500 })
   }
 
-  if (profile.generations_used >= profile.generations_limit) {
+  if (!allowed) {
     return NextResponse.json(
       { error: 'Generation limit reached for your plan. Upgrade to continue.' },
       { status: 403 }
@@ -56,11 +55,6 @@ export async function POST(req: NextRequest) {
       .from('generations')
       .update({ outputs, status: 'complete' })
       .eq('id', genRow.id)
-
-    await supabase
-      .from('profiles')
-      .update({ generations_used: profile.generations_used + 1 })
-      .eq('id', user.id)
 
     return NextResponse.json({ id: genRow.id, outputs })
   } catch (err) {
