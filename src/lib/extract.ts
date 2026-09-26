@@ -1,6 +1,6 @@
 import { parseHTML } from 'linkedom'
 import { Readability } from '@mozilla/readability'
-import { YoutubeTranscript } from 'youtube-transcript'
+import { fetchTranscript } from 'youtube-transcript-plus'
 import { assertSafeUrl } from './security/ssrf-guard'
 
 const MAX_INPUT_CHARS = 14000 // hard cap regardless of plan — refined per-plan in Step 6
@@ -50,7 +50,10 @@ export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {
 }
 
 export async function extractFromYoutube(rawUrl: string): Promise<ExtractResult> {
-  const transcript = await YoutubeTranscript.fetchTranscript(rawUrl)
+  const transcript = await fetchTranscript(rawUrl, {
+    userAgent:
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+  })
   if (!transcript.length) {
     throw new Error('No transcript/captions available for this video')
   }
