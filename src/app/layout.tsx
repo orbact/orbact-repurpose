@@ -13,6 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://your-actual-vercel-url.vercel.app'),
   title: "Orbact Repurpose — Turn Content Into Every Platform",
   description: "Paste a blog post, video, or text. Get a LinkedIn post, Twitter thread, Instagram caption, and quote cards — automatically.",
 };
