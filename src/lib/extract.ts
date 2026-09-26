@@ -1,4 +1,4 @@
-import { JSDOM } from 'jsdom'
+import { parseHTML } from 'linkedom'
 import { Readability } from '@mozilla/readability'
 import { YoutubeTranscript } from 'youtube-transcript'
 import { assertSafeUrl } from './security/ssrf-guard'
@@ -29,8 +29,13 @@ export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {
     clearTimeout(timeout)
   }
 
-  const dom = new JSDOM(html, { url: url.toString() })
-  const reader = new Readability(dom.window.document)
+  const { document } = parseHTML(html)
+  try {
+    ;(document as { baseURI?: string }).baseURI = url.toString()
+  } catch {
+    // best-effort — relative links may not resolve perfectly without this, but extraction still works
+  }
+  const reader = new Readability(document as unknown as Document)
   const article = reader.parse()
 
   if (!article || !article.textContent?.trim()) {
