@@ -12,10 +12,12 @@ export function UpgradeButtons() {
   }
 
   return (
-    <div>
-      <button onClick={() => handleUpgrade('starter')}>Upgrade to Starter — $19/mo</button>
-      <button onClick={() => handleUpgrade('pro')} style={{ marginLeft: 10 }}>
-        Upgrade to Pro — $49/mo
+    <div className="flex gap-2">
+      <button onClick={() => handleUpgrade('starter')} className="btn-secondary text-sm">
+        Starter — $19/mo
+      </button>
+      <button onClick={() => handleUpgrade('pro')} className="btn-primary text-sm">
+        Pro — $49/mo
       </button>
     </div>
   )
@@ -29,5 +31,9 @@ export function ManageBillingButton() {
     else alert(data.error || 'Could not open billing portal')
   }
 
-  return <button onClick={handleManage}>Manage Billing</button>
+  return (
+    <button onClick={handleManage} className="btn-secondary text-sm">
+      Manage Billing
+    </button>
+  )
 }

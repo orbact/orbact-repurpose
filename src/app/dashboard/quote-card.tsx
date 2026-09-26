@@ -71,15 +71,24 @@ export default function QuoteCard({ quote, imageDataUrl, error }: QuoteCardProps
   }
 
   return (
-    <div style={{ display: 'inline-block', margin: 10, textAlign: 'center' }}>
-      {!imageDataUrl && !error && <p>Generating image...</p>}
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+    <div className="glass-card p-3 flex flex-col items-center gap-3 w-64">
+      {!imageDataUrl && !error && (
+        <div className="w-56 h-56 rounded-lg bg-white/5 animate-pulse flex items-center justify-center">
+          <span className="text-xs text-muted">Generating...</span>
+        </div>
+      )}
+      {error && (
+        <div className="w-56 h-56 rounded-lg bg-white/5 flex items-center justify-center p-4">
+          <span className="text-xs text-danger text-center">{error}</span>
+        </div>
+      )}
       <canvas
         ref={canvasRef}
-        style={{ width: 260, height: 260, borderRadius: 8, display: imageDataUrl ? 'block' : 'none' }}
+        className="rounded-lg w-56 h-56"
+        style={{ display: imageDataUrl ? 'block' : 'none' }}
       />
       {imageDataUrl && (
-        <button onClick={handleDownload} style={{ marginTop: 8 }}>
+        <button onClick={handleDownload} className="btn-secondary text-sm w-full">
           Download
         </button>
       )}
