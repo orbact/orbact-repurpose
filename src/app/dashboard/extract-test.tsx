@@ -162,6 +162,12 @@ export default function ExtractTest() {
           ))}
         </div>
 
+        {type === 'youtube' && (
+          <p className="text-xs text-muted mb-3">
+            YouTube caption extraction is best-effort and doesn't work for every video — if it fails, paste the transcript directly using "Pasted Text" instead.
+          </p>
+        )}
+
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
