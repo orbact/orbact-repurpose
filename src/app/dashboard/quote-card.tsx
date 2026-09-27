@@ -8,6 +8,15 @@ type QuoteCardProps = {
   error: string | null
 }
 
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = reject
+    img.src = src
+  })
+}
+
 export default function QuoteCard({ quote, imageDataUrl, error }: QuoteCardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -18,23 +27,51 @@ export default function QuoteCard({ quote, imageDataUrl, error }: QuoteCardProps
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const img = new Image()
-    img.onload = () => {
+    let cancelled = false
+
+    async function render() {
+      const [bg, logo] = await Promise.all([
+        loadImage(imageDataUrl!),
+        loadImage('/logo.png').catch(() => null), // logo is optional — don't break the card if it fails to load
+      ])
+      if (cancelled || !canvas || !ctx) return
+
       canvas.width = 1080
       canvas.height = 1080
-      ctx.drawImage(img, 0, 0, 1080, 1080)
 
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.45)'
+      // Background
+      ctx.drawImage(bg, 0, 0, 1080, 1080)
+
+      // Layered gradient overlay — darker at top and bottom for text/logo legibility,
+      // lighter in the middle so the background image still reads through
+      const gradient = ctx.createLinearGradient(0, 0, 0, 1080)
+      gradient.addColorStop(0, 'rgba(10, 10, 15, 0.65)')
+      gradient.addColorStop(0.35, 'rgba(10, 10, 15, 0.25)')
+      gradient.addColorStop(0.65, 'rgba(10, 10, 15, 0.25)')
+      gradient.addColorStop(1, 'rgba(10, 10, 15, 0.75)')
+      ctx.fillStyle = gradient
       ctx.fillRect(0, 0, 1080, 1080)
 
+      // Violet accent bar — small brand touch, top-left
+      ctx.fillStyle = '#7c3aed'
+      ctx.fillRect(70, 70, 64, 8)
+
+      // Large stylized quote mark behind the text, low opacity
+      ctx.font = 'bold 220px Georgia, serif'
+      ctx.fillStyle = 'rgba(124, 58, 237, 0.25)'
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'top'
+      ctx.fillText('"', 60, 140)
+
+      // Quote text, word-wrapped and centered
       ctx.fillStyle = '#ffffff'
-      ctx.font = 'bold 56px sans-serif'
+      ctx.font = 'bold 54px Arial, sans-serif'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
 
       const words = quote.split(' ')
-      const maxWidth = 880
-      const lineHeight = 72
+      const maxWidth = 860
+      const lineHeight = 70
       const lines: string[] = []
       let currentLine = ''
 
@@ -49,16 +86,24 @@ export default function QuoteCard({ quote, imageDataUrl, error }: QuoteCardProps
       }
       if (currentLine) lines.push(currentLine)
 
-      const startY = 540 - ((lines.length - 1) * lineHeight) / 2
+      const startY = 500 - ((lines.length - 1) * lineHeight) / 2
       lines.forEach((line, i) => {
         ctx.fillText(line, 540, startY + i * lineHeight)
       })
 
-      ctx.font = '28px sans-serif'
-      ctx.fillStyle = 'rgba(255,255,255,0.7)'
-      ctx.fillText('Orbact Repurpose', 540, 1000)
+      // Footer: real logo instead of text watermark
+      if (logo) {
+        const logoSize = 48
+        ctx.globalAlpha = 0.85
+        ctx.drawImage(logo, 540 - logoSize / 2, 960, logoSize, logoSize)
+        ctx.globalAlpha = 1
+      }
     }
-    img.src = imageDataUrl
+
+    render()
+    return () => {
+      cancelled = true
+    }
   }, [imageDataUrl, quote])
 
   function handleDownload() {

@@ -53,9 +53,9 @@ export default function ExtractTest() {
     setQuoteImages(quotes.map(() => ({ imageDataUrl: null, error: null })))
 
     const styles = [
-      'dramatic cinematic lighting, deep indigo and electric violet color palette, flowing abstract shapes, digital art, high detail',
-      'bold geometric composition, neon cyan and magenta accents on dark background, futuristic tech aesthetic, sharp angular shapes',
-      'ethereal smoke and light trails, warm amber and deep teal gradient, atmospheric depth, painterly digital art',
+      'professional editorial magazine cover background, deep indigo and electric violet gradient, soft dramatic studio lighting, generous empty negative space in the center, minimalist premium tech aesthetic, high detail, 8k',
+      'modern tech conference poster background, dark navy with neon cyan and magenta light streaks, sharp geometric shapes off to one side, large empty negative space in the center for text, premium sleek aesthetic, high detail, 8k',
+      'award-winning architectural photography style background, warm amber and deep teal gradient, dramatic depth of field, generous empty negative space in the center, cinematic premium mood, high detail, 8k',
     ]
 
     for (let i = 0; i < quotes.length; i++) {
