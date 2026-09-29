@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { readJsonBody, RequestBodyError } from '@/lib/http/read-json'
+import { managedPublishingPlatforms } from '@/lib/publishing-config'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const platforms = new Set(['linkedin', 'x', 'instagram', 'facebook'])
@@ -38,10 +39,14 @@ export async function GET() {
   if (error) return NextResponse.json({ error: 'Could not load calendar' }, { status: 503 })
   const { data: connected } = await createAdminClient().from('publishing_connections')
     .select('platform').eq('user_id', user.id).eq('enabled', true)
+  const allowedPlatforms = process.env.MAKE_PUBLISH_WEBHOOK_URL && process.env.MAKE_WEBHOOK_API_KEY
+    ? managedPublishingPlatforms()
+    : new Set<string>()
   return NextResponse.json({
     items: data,
-    connectedPlatforms: process.env.ENABLE_MANAGED_PUBLISHING === 'true'
-      ? (connected ?? []).map((item) => item.platform) : [],
+    connectedPlatforms: (connected ?? [])
+      .map((item) => item.platform)
+      .filter((platform) => allowedPlatforms.has(platform)),
   })
 }
 
@@ -93,8 +98,8 @@ export async function POST(req: NextRequest) {
   }
   const admin = createAdminClient()
   if (deliveryMode === 'managed') {
-    if (process.env.ENABLE_MANAGED_PUBLISHING !== 'true' ||
-        !process.env.N8N_PUBLISH_WEBHOOK_URL || !process.env.N8N_PUBLISH_SIGNING_SECRET) {
+    if (!managedPublishingPlatforms().has(platform as 'linkedin' | 'x' | 'instagram' | 'facebook') ||
+        !process.env.MAKE_PUBLISH_WEBHOOK_URL || !process.env.MAKE_WEBHOOK_API_KEY) {
       return NextResponse.json({ error: 'Managed publishing is not configured.' }, { status: 503 })
     }
     const { data: connection } = await admin.from('publishing_connections')

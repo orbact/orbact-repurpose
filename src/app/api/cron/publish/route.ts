@@ -1,6 +1,6 @@
-import { createHmac } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { makeWebhookUrl, managedPublishingPlatforms, parsePublisherResult } from '@/lib/publishing-config'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -15,27 +15,20 @@ type Job = {
   scheduled_at: string
 }
 
-function publisherUrl(): URL {
-  const url = new URL(process.env.N8N_PUBLISH_WEBHOOK_URL!)
-  if (url.protocol !== 'https:' || url.username || url.password) {
-    throw new Error('Publishing webhook must use HTTPS without embedded credentials')
-  }
-  return url
-}
-
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET
   if (!secret || req.headers.get('authorization') !== 'Bearer ' + secret) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
-  if (process.env.ENABLE_MANAGED_PUBLISHING !== 'true') {
+  const allowedPlatforms = managedPublishingPlatforms()
+  if (allowedPlatforms.size === 0) {
     return NextResponse.json({ disabled: true })
   }
-  if (!process.env.N8N_PUBLISH_WEBHOOK_URL || !process.env.N8N_PUBLISH_SIGNING_SECRET) {
+  if (!process.env.MAKE_PUBLISH_WEBHOOK_URL || !process.env.MAKE_WEBHOOK_API_KEY) {
     return NextResponse.json({ error: 'Publisher not configured' }, { status: 503 })
   }
   let url: URL
-  try { url = publisherUrl() } catch {
+  try { url = makeWebhookUrl(process.env.MAKE_PUBLISH_WEBHOOK_URL) } catch {
     return NextResponse.json({ error: 'Invalid publisher URL' }, { status: 503 })
   }
 
@@ -54,6 +47,14 @@ export async function GET(req: NextRequest) {
 
   for (const job of jobs) {
     try {
+      if (!allowedPlatforms.has(job.platform as 'linkedin' | 'x' | 'instagram' | 'facebook')) {
+        const { error } = await admin.from('publish_queue').update({
+          status: 'failed', last_error: 'Managed publishing is disabled for this platform.',
+        }).eq('id', job.id).eq('status', 'publishing')
+        if (error) throw error
+        results.push({ id: job.id, status: 'failed' })
+        continue
+      }
       const { data: connection, error: connectionError } = await admin.from('publishing_connections')
         .select('external_account_id').eq('user_id', job.user_id)
         .eq('platform', job.platform).eq('enabled', true).single()
@@ -75,13 +76,11 @@ export async function GET(req: NextRequest) {
         mediaUrl: job.media_url,
         scheduledAt: job.scheduled_at,
       })
-      const signature = createHmac('sha256', process.env.N8N_PUBLISH_SIGNING_SECRET!)
-        .update(payload).digest('hex')
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Orbact-Signature': signature,
+          'x-make-apikey': process.env.MAKE_WEBHOOK_API_KEY!,
           'X-Orbact-Job-Id': job.id,
         },
         body: payload,
@@ -90,24 +89,20 @@ export async function GET(req: NextRequest) {
         signal: AbortSignal.timeout(20_000),
       })
       if (!response.ok) throw new Error('Publishing workflow returned HTTP ' + response.status)
-      const result = await response.json() as {
-        status?: string
-        externalId?: string
-        error?: string
-      }
+      const result = parsePublisherResult(await response.json())
+      if (!result) throw new Error('Publishing workflow returned an incomplete result')
       if (result.status === 'failed') {
         const { error } = await admin.from('publish_queue').update({
-          status: 'failed', last_error: (result.error || 'Platform rejected the post').slice(0, 300),
+          status: 'failed', last_error: result.error,
         }).eq('id', job.id).eq('status', 'publishing')
         if (error) throw error
         results.push({ id: job.id, status: 'failed' })
         continue
       }
-      if (result.status !== 'published') throw new Error('Publishing workflow returned an uncertain result')
       const { error } = await admin.from('publish_queue').update({
         status: 'published',
         published_at: new Date().toISOString(),
-        external_post_id: typeof result.externalId === 'string' ? result.externalId.slice(0, 200) : null,
+        external_post_id: result.externalId,
         last_error: null,
       }).eq('id', job.id).eq('status', 'publishing')
       if (error) throw error

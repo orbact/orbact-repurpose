@@ -16,9 +16,9 @@ Updated 2026-09-29. Product direction: Repurpose is Orbact's focused content dra
 
 ## Phase 2 — publishing automation
 
-**Implemented in code:** manual calendar for four platforms; managed queue gated by an environment flag and enabled account row; per-post approval, status, cancellation before dispatch, JPEG upload for Instagram, cron claim function, signed n8n handoff, and conservative `needs_review` handling for uncertain delivery.
+**Implemented in code:** manual calendar for four platforms; managed queue gated by an environment flag, explicit platform allowlist, and enabled account row; per-post approval, status, cancellation before dispatch, JPEG upload for Instagram, cron claim function, Make API-key-authenticated webhook handoff, and conservative `needs_review` handling for uncertain delivery.
 
-**External integration required:** build the n8n workflow and durable idempotency store; obtain LinkedIn, X, Facebook, and Instagram publishing permissions and tokens; provision account rows; configure a reliable scheduler; test all four platform branches. See [platform setup](PLATFORM_SETUP.md) and [n8n contract](N8N_PUBLISHING_CONTRACT.md). Keep `ENABLE_MANAGED_PUBLISHING=false` until this is done. Direct social OAuth connection and self-service reconnection are not implemented; an operator provisions connections.
+**External integration required:** build a new Make scenario and durable idempotency store; obtain LinkedIn, Facebook, and Instagram publishing permissions and tokens; provision account rows; configure a reliable scheduler; test each enabled branch. X remains manual while the budget is zero because its official write API charges per post. See [platform setup](PLATFORM_SETUP.md) and [Make contract](MAKE_PUBLISHING_CONTRACT.md). Keep `ENABLE_MANAGED_PUBLISHING=false` until this is done. Direct social OAuth connection and self-service reconnection are not implemented; an operator provisions connections.
 
 **Future improvement after pilot feedback:** automatic failure notifications, user-facing account connection/reconnection, operational dashboard, campaign templates, real connected-account analytics, and team approvals. These require additional product and platform work; no screen currently claims they are available.
 

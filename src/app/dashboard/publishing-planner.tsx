@@ -144,11 +144,21 @@ export default function PublishingPlanner({
     }
   }
 
+  async function copyText(text: string, label: string) {
+    setError(null)
+    try {
+      await navigator.clipboard.writeText(text)
+      setNotice(`${label} copied. Paste it into the platform when you are ready.`)
+    } catch {
+      setError('Could not copy automatically. Select the text and copy it manually.')
+    }
+  }
+
   return (
     <section id="calendar" className="glass-card p-6 md:p-8">
       <p className="text-xs uppercase tracking-[0.2em] text-primary mb-2">02 / Plan</p>
       <h2 className="text-2xl font-semibold tracking-tight">Content calendar</h2>
-      <p className="text-sm text-muted mt-2">Plan for LinkedIn, X, Instagram, and Facebook. Connected accounts can publish after you approve each post.</p>
+      <p className="text-sm text-muted mt-2">Plan and copy posts for LinkedIn, X, Instagram, and Facebook at no cost. Automatic delivery appears only for approved connected accounts.</p>
       {outputs && (
         <form onSubmit={plan} className="grid md:grid-cols-2 xl:grid-cols-4 gap-4 items-end mt-7">
           <div>
@@ -204,7 +214,12 @@ export default function PublishingPlanner({
             {item.last_error && <p className="text-xs text-warning mt-3">{item.last_error}</p>}
             {item.external_post_id && <p className="text-xs text-muted mt-2">Platform ID: {item.external_post_id}</p>}
             <div className="flex flex-wrap gap-4 mt-4">
-              <button type="button" className="text-xs text-violet-300 hover:underline" onClick={() => navigator.clipboard.writeText(item.content)}>Copy</button>
+              <button type="button" className="text-xs text-violet-300 hover:underline" onClick={() => copyText(item.content, 'Post copy')}>Copy all</button>
+              {item.delivery_mode === 'manual' && item.platform === 'x' &&
+                item.content.split(/\n\s*\n/).filter(Boolean).length > 1 &&
+                item.content.split(/\n\s*\n/).filter(Boolean).map((post, index) => (
+                  <button key={index} type="button" className="text-xs text-violet-300 hover:underline" onClick={() => copyText(post.trim(), `X post ${index + 1}`)}>Copy X post {index + 1}</button>
+                ))}
               {item.status === 'planned' && <button type="button" className="text-xs text-muted hover:text-white" onClick={() => changeItem(item.id, 'PATCH')}>Mark published</button>}
               {(item.status === 'planned' || item.status === 'queued') && <button type="button" className="text-xs text-muted hover:text-danger" onClick={() => changeItem(item.id, 'DELETE')}>Remove</button>}
             </div>
