@@ -1,6 +1,6 @@
 # Orbact Repurpose: external platform setup
 
-Use a test environment first. The production domain has not been supplied, so replace `https://YOUR-DOMAIN` everywhere with its exact HTTPS origin. These steps are the founder's external configuration tasks; no account settings are changed by this repository.
+Use a test environment first. The current app origin is `https://orbact-repurpose.vercel.app`; use it in place of `https://YOUR-DOMAIN` while testing without a purchased domain. Steps 1, 2, and 5 include later launch work and are not required to verify the free prototype. This guide records external configuration; repository changes alone do not update service settings.
 
 ## 1. Supabase database and authentication
 
@@ -22,6 +22,8 @@ References: [Supabase API keys](https://supabase.com/docs/guides/getting-started
 
 ### If a paid invoice leaves the old plan or credits
 
+The September 2026 sandbox incident was resolved: the paid renewal, failed payment and recovery, duplicate delivery, and out-of-order delivery were verified against the deployed webhook and Supabase ledger. Keep the steps below for future incidents; live Stripe remains a separate cutover.
+
 1. Confirm the deployed app includes the `invoice.paid` handler. A local code fix does not change the Vercel deployment until a new deployment is promoted.
 2. In Stripe **test mode** > Workbench > Webhooks, open the destination whose URL exactly matches the deployed `/api/webhooks/stripe` URL. Reveal its signing secret. In Vercel > Project > Settings > Environment Variables, set `STRIPE_WEBHOOK_SECRET` to that destination's `whsec_...` for the environment receiving the event. A Stripe CLI `listen` secret or a secret from another destination will fail verification. Redeploy after changing the Vercel variable.
 3. Use Stripe Workbench **Resend** on the original `invoice.paid` event. This creates a fresh delivery signature. If sending from a script, sign the **exact bytes** sent in the POST body with a fresh timestamp and the destination secret. Do not reuse the event's original signature header or alter the body after signing. Keep normal signature timestamp verification enabled.
@@ -32,18 +34,22 @@ References: [Stripe webhooks](https://docs.stripe.com/webhooks), [subscription e
 
 ## 3. Groq and Upstash
 
-1. Create a dedicated Groq API key, set `GROQ_API_KEY`, and verify access to the configured `openai/gpt-oss-120b` model. Test real articles and transcripts for factual accuracy before inviting customers. Set spend/rate alerts in Groq.
-2. Create an Upstash Redis database near the Vercel region. Copy its REST URL and token to `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`. Use separate resources for test and production.
+Current verification (September 29, 2026): Groq Console is on its **Free** plan and has an `Orbact Social` API key. The active `openai/gpt-oss-120b` model returned a valid JSON completion. This organization's limit for that model is 30 requests/minute, 1,000 requests/day, 8,000 tokens/minute, and 200,000 tokens/day. Upstash returned `PONG`, and the sliding-window limiter accepted its first two requests. Upstash Console access is still needed to verify the database plan and region.
+
+1. Keep the existing dedicated Groq key in `GROQ_API_KEY`; the configured `openai/gpt-oss-120b` model is working. Test real articles and transcripts for factual accuracy before inviting customers. The free Groq tier has hard rate limits; monitor usage in the console. Organization-wide spend limits require a paid tier and are unnecessary while staying on Free.
+2. Keep the existing Upstash Redis REST URL and token in the server-only `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` variables. Confirm in Upstash Console that the database is on Free and its region is near the Vercel function region (`iad1` / US East currently). The current free plan lists one free database. Preview and Production can share it because the app namespaces rate-limit keys by deployment environment, but they share its quota and credential. Add those variables to Preview only if Preview needs working API routes; Production already has them. Do not expose the token in a browser variable.
 
 References: [Groq quickstart](https://console.groq.com/docs/quickstart), [Upstash Redis](https://upstash.com/docs/redis/overall/getstarted).
 
 ## 4. Vercel deployment and domain
 
+Current verification (September 29, 2026): the project is connected to `orbact/orbact-repurpose`, detects Next.js from the repository root, deploys `main` to `https://orbact-repurpose.vercel.app`, runs functions in `iad1`, and has `APP_URL` set to that origin. The deployment is Ready. No custom app domain is attached. The team is on Hobby; [Vercel limits Hobby to non-commercial personal use](https://vercel.com/docs/plans/hobby), so use Pro or another commercial hosting plan before accepting paying customers. Groq and Supabase variables currently span Production and Preview; Upstash and Stripe variables target Production only.
+
 1. Import the repository into Vercel. If the imported Git root is the parent `V1` folder, set Project Settings > Build and Deployment > Root Directory to `orbact-repurpose`. Confirm Next.js detection.
-2. In Settings > Domains, attach your domain and apply the DNS records Vercel gives you. Then set `APP_URL=https://YOUR-DOMAIN` in Environment Variables, without a trailing slash.
-3. Add the Supabase, Groq, Upstash, and Stripe variables above to the correct Preview/Production environments. Use test credentials on Preview and live credentials on Production. Redeploy after variable changes.
+2. The free Vercel subdomain `https://orbact-repurpose.vercel.app` works during testing and needs no DNS purchase. If you later attach a custom domain in Settings > Domains, apply the DNS records Vercel gives you and change `APP_URL` to its exact HTTPS origin, without a trailing slash.
+3. For the free prototype, keep the existing sandbox Supabase and Stripe credentials on Production and the existing Groq and Upstash credentials. The Preview deployment does not yet have Upstash or Stripe variables; add test values there only when exercising those routes in Preview. A future live cutover needs a separate Supabase project and live Stripe credentials. Redeploy after variable changes.
 4. Leave `ENABLE_MANAGED_PUBLISHING=false` until step 5 is complete. The manual calendar works without n8n or a publishing cron.
-5. Deploy and run the production checklist below. Watch Vercel function logs for API, webhook, and cron failures. Configure spend alerts and database backups.
+5. Deploy and run the acceptance checklist below. Watch Vercel function logs for API, webhook, and cron failures. Vercel's Hobby plan is for non-commercial personal use; a paid SaaS launch needs a commercial hosting plan or migration to a free host that allows commercial use. Hobby does not offer Vercel Spend Management or project anomaly alerts; check usage manually during the free prototype.
 
 References: [Vercel environment variables](https://vercel.com/docs/environment-variables), [domains](https://vercel.com/docs/domains/working-with-domains/add-a-domain).
 
