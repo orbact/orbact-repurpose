@@ -4,8 +4,6 @@ import { useEffect, useRef } from 'react'
 
 type QuoteCardProps = {
   quote: string
-  imageDataUrl: string | null
-  error: string | null
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -17,11 +15,10 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   })
 }
 
-export default function QuoteCard({ quote, imageDataUrl, error }: QuoteCardProps) {
+export default function QuoteCard({ quote }: QuoteCardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
-    if (!imageDataUrl) return
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
@@ -30,48 +27,90 @@ export default function QuoteCard({ quote, imageDataUrl, error }: QuoteCardProps
     let cancelled = false
 
     async function render() {
-      const [bg, logo] = await Promise.all([
-        loadImage(imageDataUrl!),
-        loadImage('/logo.png').catch(() => null), // logo is optional — don't break the card if it fails to load
-      ])
+      const logo = await loadImage('/logo.png').catch(() => null)
       if (cancelled || !canvas || !ctx) return
 
       canvas.width = 1080
       canvas.height = 1080
 
-      // Background
-      ctx.drawImage(bg, 0, 0, 1080, 1080)
-
-      // Layered gradient overlay — darker at top and bottom for text/logo legibility,
-      // lighter in the middle so the background image still reads through
-      const gradient = ctx.createLinearGradient(0, 0, 0, 1080)
-      gradient.addColorStop(0, 'rgba(10, 10, 15, 0.65)')
-      gradient.addColorStop(0.35, 'rgba(10, 10, 15, 0.25)')
-      gradient.addColorStop(0.65, 'rgba(10, 10, 15, 0.25)')
-      gradient.addColorStop(1, 'rgba(10, 10, 15, 0.75)')
-      ctx.fillStyle = gradient
+      // Dark background
+      ctx.fillStyle = '#0a0a0f'
       ctx.fillRect(0, 0, 1080, 1080)
 
-      // Violet accent bar — small brand touch, top-left
-      ctx.fillStyle = '#7c3aed'
-      ctx.fillRect(70, 70, 64, 8)
+      // Soft glow accents (top-left violet, bottom-right blue)
+      const glow1 = ctx.createRadialGradient(150, 150, 0, 150, 150, 500)
+      glow1.addColorStop(0, 'rgba(124, 58, 237, 0.35)')
+      glow1.addColorStop(1, 'rgba(124, 58, 237, 0)')
+      ctx.fillStyle = glow1
+      ctx.fillRect(0, 0, 1080, 1080)
 
-      // Large stylized quote mark behind the text, low opacity
-      ctx.font = 'bold 220px Georgia, serif'
-      ctx.fillStyle = 'rgba(124, 58, 237, 0.25)'
-      ctx.textAlign = 'left'
-      ctx.textBaseline = 'top'
-      ctx.fillText('"', 60, 140)
+      const glow2 = ctx.createRadialGradient(950, 950, 0, 950, 950, 450)
+      glow2.addColorStop(0, 'rgba(59, 130, 246, 0.3)')
+      glow2.addColorStop(1, 'rgba(59, 130, 246, 0)')
+      ctx.fillStyle = glow2
+      ctx.fillRect(0, 0, 1080, 1080)
 
-      // Quote text, word-wrapped and centered
+      // Decorative diagonal ribbon behind the card
+      ctx.save()
+      ctx.translate(950, 550)
+      ctx.rotate(-0.5)
+      const ribbon = ctx.createLinearGradient(-100, 0, 100, 0)
+      ribbon.addColorStop(0, '#7c3aed')
+      ribbon.addColorStop(1, '#3b82f6')
+      ctx.fillStyle = ribbon
+      ctx.fillRect(-90, -700, 180, 1400)
+      ctx.restore()
+
+      // White card
+      const cardX = 90
+      const cardY = 170
+      const cardW = 900
+      const cardH = 760
+      const radius = 40
+
+      ctx.save()
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.4)'
+      ctx.shadowBlur = 40
+      ctx.shadowOffsetY = 20
+      ctx.beginPath()
+      ctx.roundRect(cardX, cardY, cardW, cardH, radius)
       ctx.fillStyle = '#ffffff'
-      ctx.font = 'bold 54px Arial, sans-serif'
+      ctx.fill()
+      ctx.restore()
+
+      // Clip to card for footer strip + content
+      ctx.save()
+      ctx.beginPath()
+      ctx.roundRect(cardX, cardY, cardW, cardH, radius)
+      ctx.clip()
+
+      // Violet footer strip inside the card
+      const footerH = 120
+      ctx.fillStyle = '#7c3aed'
+      ctx.fillRect(cardX, cardY + cardH - footerH, cardW, footerH)
+
+      // Eyebrow label
+      ctx.fillStyle = '#7c3aed'
+      ctx.font = 'bold 30px Arial, sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'alphabetic'
+      ctx.fillText('K E Y   T A K E A W A Y', 540, 260)
+
+      // Decorative large quote mark
+      ctx.fillStyle = 'rgba(124, 58, 237, 0.85)'
+      ctx.font = 'bold 160px Georgia, serif'
+      ctx.textAlign = 'left'
+      ctx.fillText('"', cardX + 60, 420)
+
+      // Main quote text, word-wrapped
+      ctx.fillStyle = '#111111'
+      ctx.font = 'bold 46px Arial, sans-serif'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
 
       const words = quote.split(' ')
-      const maxWidth = 860
-      const lineHeight = 70
+      const maxWidth = 740
+      const lineHeight = 60
       const lines: string[] = []
       let currentLine = ''
 
@@ -86,25 +125,31 @@ export default function QuoteCard({ quote, imageDataUrl, error }: QuoteCardProps
       }
       if (currentLine) lines.push(currentLine)
 
-      const startY = 500 - ((lines.length - 1) * lineHeight) / 2
+      const startY = 560 - ((lines.length - 1) * lineHeight) / 2
       lines.forEach((line, i) => {
         ctx.fillText(line, 540, startY + i * lineHeight)
       })
 
-      // Footer: real logo instead of text watermark
+      // Logo centered in the footer strip
       if (logo) {
-        const logoSize = 48
-        ctx.globalAlpha = 0.85
-        ctx.drawImage(logo, 540 - logoSize / 2, 960, logoSize, logoSize)
-        ctx.globalAlpha = 1
+        const logoSize = 52
+        ctx.drawImage(
+          logo,
+          540 - logoSize / 2,
+          cardY + cardH - footerH / 2 - logoSize / 2,
+          logoSize,
+          logoSize
+        )
       }
+
+      ctx.restore()
     }
 
     render()
     return () => {
       cancelled = true
     }
-  }, [imageDataUrl, quote])
+  }, [quote])
 
   function handleDownload() {
     const canvas = canvasRef.current
@@ -117,26 +162,10 @@ export default function QuoteCard({ quote, imageDataUrl, error }: QuoteCardProps
 
   return (
     <div className="glass-card p-3 flex flex-col items-center gap-3 w-64">
-      {!imageDataUrl && !error && (
-        <div className="w-56 h-56 rounded-lg bg-white/5 animate-pulse flex items-center justify-center">
-          <span className="text-xs text-muted">Generating...</span>
-        </div>
-      )}
-      {error && (
-        <div className="w-56 h-56 rounded-lg bg-white/5 flex items-center justify-center p-4">
-          <span className="text-xs text-danger text-center">{error}</span>
-        </div>
-      )}
-      <canvas
-        ref={canvasRef}
-        className="rounded-lg w-56 h-56"
-        style={{ display: imageDataUrl ? 'block' : 'none' }}
-      />
-      {imageDataUrl && (
-        <button onClick={handleDownload} className="btn-secondary text-sm w-full">
-          Download
-        </button>
-      )}
+      <canvas ref={canvasRef} className="rounded-lg w-56 h-56" />
+      <button onClick={handleDownload} className="btn-secondary text-sm w-full">
+        Download
+      </button>
     </div>
   )
 }

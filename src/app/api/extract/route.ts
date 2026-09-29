@@ -1,10 +1,12 @@
 import { extractRateLimit } from '@/lib/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { extractFromUrl, extractFromYoutube, extractFromText } from '@/lib/extract'
+import { extractFromUrl, extractFromYoutube, extractFromText, MAX_INPUT_CHARS } from '@/lib/extract'
+import { readJsonBody, RequestBodyError } from '@/lib/http/read-json'
+
+export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
-  // Require a logged-in user — no anonymous extraction, this is also your first line of abuse defense
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
@@ -19,23 +21,45 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const body = await req.json().catch(() => null)
-  if (!body?.type || !body?.input) {
-    return NextResponse.json({ error: 'Missing type or input' }, { status: 400 })
+  let body: unknown
+  try {
+    body = await readJsonBody(req)
+  } catch (error) {
+    const status = error instanceof RequestBodyError ? error.status : 400
+    const message = error instanceof Error ? error.message : 'Invalid request body'
+    return NextResponse.json({ error: message }, { status })
   }
 
-  const { type, input } = body as { type: string; input: string }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+  }
+  const { type, input } = body as Record<string, unknown>
+  if (type !== 'url' && type !== 'youtube' && type !== 'text') {
+    return NextResponse.json({ error: 'Invalid input type' }, { status: 400 })
+  }
+  if (typeof input !== 'string' || !input.trim()) {
+    return NextResponse.json({ error: 'Input is required' }, { status: 400 })
+  }
+  if (type === 'text' && input.length > MAX_INPUT_CHARS) {
+    return NextResponse.json(
+      { error: 'Text must be 14,000 characters or fewer' },
+      { status: 413 }
+    )
+  }
+  if (type !== 'text' && input.length > 2048) {
+    return NextResponse.json({ error: 'URL is too long' }, { status: 413 })
+  }
 
   try {
-    let result
-    if (type === 'url') result = await extractFromUrl(input)
-    else if (type === 'youtube') result = await extractFromYoutube(input)
-    else if (type === 'text') result = extractFromText(input)
-    else return NextResponse.json({ error: 'Invalid type' }, { status: 400 })
-
+    const result =
+      type === 'url'
+        ? await extractFromUrl(input)
+        : type === 'youtube'
+          ? await extractFromYoutube(input)
+          : extractFromText(input)
     return NextResponse.json(result)
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Extraction failed'
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Extraction failed'
     return NextResponse.json({ error: message }, { status: 422 })
   }
 }

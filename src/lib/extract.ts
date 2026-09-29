@@ -1,9 +1,13 @@
+import http from 'node:http'
+import https from 'node:https'
 import { parseHTML } from 'linkedom'
 import { Readability } from '@mozilla/readability'
 import { fetchTranscript } from 'youtube-transcript-plus'
-import { assertSafeUrl } from './security/ssrf-guard'
+import { assertSafeUrl, type SafeUrl } from './security/ssrf-guard'
 
-const MAX_INPUT_CHARS = 14000 // hard cap regardless of plan — refined per-plan in Step 6
+export const MAX_INPUT_CHARS = 14000
+const MAX_HTML_BYTES = 2_000_000
+const MAX_REDIRECTS = 3
 
 export type ExtractResult = {
   title: string
@@ -11,29 +15,91 @@ export type ExtractResult = {
   sourceType: 'url' | 'text' | 'youtube'
 }
 
-export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {
-  const url = await assertSafeUrl(rawUrl)
+type FetchResult = { html: string } | { redirect: string }
 
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 10000) // 10s timeout — prevents a slow/hanging site from tying up your serverless function
+function requestHtml(target: SafeUrl): Promise<FetchResult> {
+  return new Promise((resolve, reject) => {
+    const transport = target.url.protocol === 'https:' ? https : http
+    const request = transport.get(
+      target.url,
+      {
+        headers: {
+          Accept: 'text/html,application/xhtml+xml',
+          'Accept-Encoding': 'identity',
+          'User-Agent': 'Mozilla/5.0 (compatible; OrbactRepurposeBot/1.0)',
+        },
+        // Use the address that passed validation, preventing a second DNS
+        // lookup from connecting to a different address.
+        lookup: (_hostname, _options, callback) => {
+          callback(null, target.address, target.family)
+        },
+      },
+      (response) => {
+        const status = response.statusCode ?? 0
+        if (status >= 300 && status < 400) {
+          const location = response.headers.location
+          response.resume()
+          if (!location) reject(new Error('Redirect has no destination'))
+          else resolve({ redirect: location })
+          return
+        }
+        if (status < 200 || status >= 300) {
+          response.resume()
+          reject(new Error('Failed to fetch URL (status ' + status + ')'))
+          return
+        }
 
-  let html: string
-  try {
-    const res = await fetch(url.toString(), {
-      signal: controller.signal,
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; OrbactRepurposeBot/1.0)' },
-    })
-    if (!res.ok) throw new Error(`Failed to fetch URL (status ${res.status})`)
-    html = await res.text()
-  } finally {
-    clearTimeout(timeout)
+        const contentType = response.headers['content-type'] ?? ''
+        if (!/^(text\/html|application\/xhtml\+xml)(?:;|$)/i.test(contentType)) {
+          response.resume()
+          reject(new Error('URL did not return an HTML page'))
+          return
+        }
+        const encoding = response.headers['content-encoding']
+        if (encoding && encoding.toLowerCase() !== 'identity') {
+          response.resume()
+          reject(new Error('Compressed pages are not supported'))
+          return
+        }
+
+        const chunks: Buffer[] = []
+        let bytes = 0
+        response.on('data', (chunk: Buffer) => {
+          bytes += chunk.length
+          if (bytes > MAX_HTML_BYTES) {
+            response.destroy(new Error('Page is too large to process'))
+            return
+          }
+          chunks.push(chunk)
+        })
+        response.on('end', () => resolve({ html: Buffer.concat(chunks).toString('utf8') }))
+        response.on('error', reject)
+      }
+    )
+
+    request.setTimeout(10_000, () => request.destroy(new Error('URL request timed out')))
+    request.on('error', reject)
+  })
+}
+
+async function fetchSafeHtml(rawUrl: string): Promise<{ html: string; url: URL }> {
+  let currentUrl = rawUrl
+  for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
+    const target = await assertSafeUrl(currentUrl)
+    const result = await requestHtml(target)
+    if ('html' in result) return { html: result.html, url: target.url }
+    currentUrl = new URL(result.redirect, target.url).toString()
   }
+  throw new Error('URL redirected too many times')
+}
 
+export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {
+  const { html, url } = await fetchSafeHtml(rawUrl)
   const { document } = parseHTML(html)
   try {
     ;(document as { baseURI?: string }).baseURI = url.toString()
   } catch {
-    // best-effort — relative links may not resolve perfectly without this, but extraction still works
+    // Relative links may not resolve perfectly; article text can still be extracted.
   }
   const reader = new Readability(document as unknown as Document)
   const article = reader.parse()
@@ -43,28 +109,38 @@ export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {
   }
 
   return {
-    title: article.title || 'Untitled',
+    title: (article.title || 'Untitled').slice(0, 200),
     text: article.textContent.trim().slice(0, MAX_INPUT_CHARS),
     sourceType: 'url',
   }
 }
 
 export async function extractFromYoutube(rawUrl: string): Promise<ExtractResult> {
+  let videoUrl: URL
+  try {
+    videoUrl = new URL(rawUrl)
+  } catch {
+    throw new Error('Invalid YouTube URL')
+  }
+  const allowedHosts = new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'])
+  if (videoUrl.protocol !== 'https:' || !allowedHosts.has(videoUrl.hostname.toLowerCase())) {
+    throw new Error('Enter a valid YouTube video URL')
+  }
   let transcript: Awaited<ReturnType<typeof fetchTranscript>>
   try {
     transcript = await fetchTranscript(rawUrl)
   } catch {
     throw new Error(
-      "Couldn't extract captions for this video — try pasting the transcript directly using the \"Pasted Text\" option instead."
+      'Could not extract captions for this video. Paste the transcript using Pasted Text instead.'
     )
   }
 
   if (!transcript.length) {
     throw new Error(
-      "This video doesn't have accessible captions — try pasting the transcript directly using the \"Pasted Text\" option instead."
+      'This video has no accessible captions. Paste the transcript using Pasted Text instead.'
     )
   }
-  const text = transcript.map((t) => t.text).join(' ')
+  const text = transcript.map((item) => item.text).join(' ')
 
   return {
     title: 'YouTube Video',

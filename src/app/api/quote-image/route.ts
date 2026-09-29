@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
 export async function POST(req: NextRequest) {
+  if (process.env.ENABLE_QUOTE_IMAGES !== 'true') {
+    return NextResponse.json({ error: 'Image generation is unavailable' }, { status: 404 })
+  }
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {

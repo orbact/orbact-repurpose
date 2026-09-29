@@ -1,106 +1,93 @@
 'use client'
-import QuoteCard from './quote-card'
+
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import type { ExtractResult } from '@/lib/extract'
+import type { GeneratedContent, GenerationBrief } from '@/lib/ai/content-schema'
+import OutputWorkspace from './output-workspace'
+import HistoryPanel from './history-panel'
+import PublishingPlanner from './publishing-planner'
 
-type QuoteImageState = { imageDataUrl: string | null; error: string | null }
+const DEFAULT_BRIEF: GenerationBrief = {
+  audience: '',
+  tone: 'clear',
+  offer: '',
+  cta: '',
+  bannedClaims: '',
+}
 
-export default function ExtractTest() {
+export default function ExtractTest({ initialBrief }: { initialBrief: GenerationBrief | null }) {
   const [type, setType] = useState<'url' | 'text' | 'youtube'>('url')
   const [input, setInput] = useState('')
-  const [extracted, setExtracted] = useState<any>(null)
-  const [outputs, setOutputs] = useState<any>(null)
-  const [quoteImages, setQuoteImages] = useState<QuoteImageState[]>([])
+  const [extracted, setExtracted] = useState<ExtractResult | null>(null)
+  const [outputs, setOutputs] = useState<GeneratedContent | null>(null)
+  const [brief, setBrief] = useState<GenerationBrief>(initialBrief ?? DEFAULT_BRIEF)
+  const [brandNotice, setBrandNotice] = useState<string | null>(null)
+  const [generationId, setGenerationId] = useState<string | null>(null)
+  const [draftTitle, setDraftTitle] = useState('')
+  const [requestId, setRequestId] = useState<string | null>(null)
+  const [historyKey, setHistoryKey] = useState(0)
+  const [saveNotice, setSaveNotice] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState<'idle' | 'extracting' | 'generating'>('idle')
   const router = useRouter()
+
+  async function saveBrandSettings() {
+    setBrandNotice(null)
+    try {
+      const response = await fetch('/api/brand', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(brief),
+      })
+      const body = await response.json()
+      setBrandNotice(response.ok ? 'Brand settings saved for future drafts.' : body.error || 'Could not save settings')
+    } catch {
+      setBrandNotice('Connection interrupted. Could not save settings.')
+    }
+  }
 
   async function handleExtract() {
     setLoading('extracting')
     setError(null)
     setExtracted(null)
     setOutputs(null)
-    setQuoteImages([])
-
+    setGenerationId(null)
+    setRequestId(null)
+    setSaveNotice(null)
     try {
       const res = await fetch('/api/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type, input }),
       })
-
       if (res.status === 401) {
-        window.location.href = '/login'
+        router.push('/login')
         return
       }
-
       const data = await res.json()
-
       if (!res.ok) {
-        setError(data.error)
-        setLoading('idle')
+        setError(data.error || 'Could not read this source')
         return
       }
       setExtracted(data)
-      setLoading('idle')
+      setDraftTitle(data.title)
     } catch {
-      setError('Network error — check your connection and try again.')
+      setError('Network error. Check your connection and try again.')
+    } finally {
       setLoading('idle')
-    }
-  }
-
-  async function generateQuoteImages(quotes: string[], theme: string) {
-    setQuoteImages(quotes.map(() => ({ imageDataUrl: null, error: null })))
-
-    const styles = [
-      'professional editorial magazine cover background, deep indigo and electric violet gradient, soft dramatic studio lighting, generous empty negative space in the center, minimalist premium tech aesthetic, high detail, 8k',
-      'modern tech conference poster background, dark navy with neon cyan and magenta light streaks, sharp geometric shapes off to one side, large empty negative space in the center for text, premium sleek aesthetic, high detail, 8k',
-      'award-winning architectural photography style background, warm amber and deep teal gradient, dramatic depth of field, generous empty negative space in the center, cinematic premium mood, high detail, 8k',
-    ]
-
-    for (let i = 0; i < quotes.length; i++) {
-      try {
-        const res = await fetch('/api/quote-image', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: `${styles[i % styles.length]}, inspired by ${theme}, no text, no words, no letters, no typography`,
-            seed: i + 1,
-          }),
-        })
-
-        if (res.status === 401) {
-          window.location.href = '/login'
-          return
-        }
-
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.error)
-
-        setQuoteImages((prev) => {
-          const next = [...prev]
-          next[i] = { imageDataUrl: data.imageDataUrl, error: null }
-          return next
-        })
-      } catch (err) {
-        setQuoteImages((prev) => {
-          const next = [...prev]
-          next[i] = {
-            imageDataUrl: null,
-            error: err instanceof Error ? err.message : 'Failed',
-          }
-          return next
-        })
-      }
     }
   }
 
   async function handleGenerate() {
+    if (!extracted) return
+    const currentRequestId = requestId ?? crypto.randomUUID()
+    setRequestId(currentRequestId)
     setLoading('generating')
     setError(null)
     setOutputs(null)
-    setQuoteImages([])
-
+    setSaveNotice(null)
     try {
       const res = await fetch('/api/generate', {
         method: 'POST',
@@ -109,148 +96,167 @@ export default function ExtractTest() {
           title: extracted.title,
           text: extracted.text,
           sourceType: extracted.sourceType,
+          requestId: currentRequestId,
+          brief,
         }),
       })
-
       if (res.status === 401) {
-        window.location.href = '/login'
+        router.push('/login')
         return
       }
-
       const data = await res.json()
-      setLoading('idle')
-
       if (!res.ok) {
-        setError(data.error)
+        setError(data.error || 'Generation failed')
+        if (data.error?.includes('refunded') || (res.status >= 400 && res.status < 500 && res.status !== 409)) setRequestId(null)
         return
       }
+      setGenerationId(data.id)
       setOutputs(data.outputs)
+      setDraftTitle(extracted.title)
+      setRequestId(null)
+      setHistoryKey((key) => key + 1)
       router.refresh()
-
-      generateQuoteImages(data.outputs.quote_highlights, extracted.title)
+      requestAnimationFrame(() => document.getElementById('workspace')?.scrollIntoView({ behavior: 'smooth' }))
     } catch {
-      setError('Network error — check your connection and try again.')
+      setError('Connection interrupted. Retry to check this same request without spending another credit.')
+    } finally {
       setLoading('idle')
     }
   }
 
-  const types: { value: 'url' | 'text' | 'youtube'; label: string }[] = [
-    { value: 'url', label: 'URL' },
-    { value: 'text', label: 'Pasted Text' },
+  async function saveEdits() {
+    if (!generationId || !outputs) return
+    setSaving(true)
+    setSaveNotice(null)
+    try {
+      const res = await fetch('/api/generations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: generationId, title: draftTitle, outputs }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setSaveNotice(data.error || 'Could not save edits')
+        return
+      }
+      setOutputs(data.generation.outputs)
+      setSaveNotice('Edits saved to your library.')
+      setHistoryKey((key) => key + 1)
+    } catch {
+      setSaveNotice('Connection interrupted. Your edits are still on this page.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const sourceTypes: { value: 'url' | 'text' | 'youtube'; label: string }[] = [
+    { value: 'url', label: 'Article URL' },
+    { value: 'text', label: 'Pasted text' },
     { value: 'youtube', label: 'YouTube' },
   ]
+  const placeholders = {
+    url: 'https://example.com/article',
+    text: 'Paste an article, script, newsletter, or transcript...',
+    youtube: 'https://www.youtube.com/watch?v=...',
+  }
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Input card */}
-      <div className="glass-card p-6">
-        <h2 className="font-semibold mb-4">Repurpose Content</h2>
+    <div className="space-y-8">
+      <div className="grid lg:grid-cols-[minmax(0,1fr)_300px] gap-6 items-start">
+        <section className="glass-card p-6 md:p-8">
+          <div className="mb-6">
+            <p className="text-xs uppercase tracking-[0.2em] text-primary mb-2">01 / Create</p>
+            <h2 className="text-2xl font-semibold tracking-tight">One source. Multiple drafts.</h2>
+            <p className="text-sm text-muted mt-2">Give the AI real source material, then shape the output for your audience.</p>
+          </div>
 
-        <div className="flex gap-2 mb-4">
-          {types.map((t) => (
-            <button
-              key={t.value}
-              onClick={() => setType(t.value)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                type === t.value
-                  ? 'bg-primary text-white'
-                  : 'bg-white/5 text-muted hover:text-foreground'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+          <div className="flex flex-wrap gap-2 mb-5" aria-label="Source type">
+            {sourceTypes.map((item) => (
+              <button key={item.value} type="button" aria-pressed={type === item.value}
+                onClick={() => { setType(item.value); setExtracted(null); setError(null); setRequestId(null) }}
+                className={'px-4 py-2 rounded-full border text-sm font-medium transition-colors ' +
+                  (type === item.value ? 'border-violet-400/60 bg-violet-500/20 text-white' : 'border-border text-muted hover:text-white hover:border-violet-400/40')}>
+                {item.label}
+              </button>
+            ))}
+          </div>
 
-        {type === 'youtube' && (
-          <p className="text-xs text-muted mb-3">
-            YouTube caption extraction is best-effort and doesn't work for every video — if it fails, paste the transcript directly using "Pasted Text" instead.
-          </p>
-        )}
-
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Paste a URL, text, or YouTube link"
-          rows={4}
-          className="input-field mb-4 resize-none"
-        />
-
-        <button
-          onClick={handleExtract}
-          disabled={loading !== 'idle' || !input}
-          className="btn-primary"
-        >
-          {loading === 'extracting' ? 'Extracting...' : '1. Extract'}
-        </button>
-
-        {error && <p className="text-danger text-sm mt-3">{error}</p>}
-
-        {extracted && (
-          <div className="mt-5 pt-5 border-t border-border">
-            <p className="font-medium mb-1">{extracted.title}</p>
-            <p className="text-sm text-muted mb-4">{extracted.text.slice(0, 300)}...</p>
-            <button
-              onClick={handleGenerate}
-              disabled={loading !== 'idle'}
-              className="btn-primary"
-            >
-              {loading === 'generating' ? 'Generating...' : '2. Generate Posts'}
+          {type === 'youtube' && <p className="text-xs text-muted mb-3">YouTube captions are best effort. If unavailable, paste the transcript instead.</p>}
+          <label htmlFor="source-input" className="block text-sm font-medium mb-2">Source content</label>
+          <textarea id="source-input" value={input} onChange={(event) => setInput(event.target.value)}
+            placeholder={placeholders[type]} rows={type === 'text' ? 8 : 3}
+            maxLength={type === 'text' ? 14000 : 2048}
+            className="input-field resize-y leading-relaxed" />
+          <div className="flex items-center justify-between gap-4 mt-3">
+            <span className="text-xs text-muted">{input.length}{type === 'text' ? '/14000' : ''} characters</span>
+            <button type="button" onClick={handleExtract} disabled={loading !== 'idle' || !input.trim()} className="btn-primary text-sm">
+              {loading === 'extracting' ? 'Reading source...' : 'Read source'}
             </button>
           </div>
-        )}
+
+          {extracted && (
+            <div className="mt-6 pt-6 border-t border-border">
+              <p className="text-xs uppercase tracking-[0.2em] text-success mb-2">Source ready</p>
+              <h3 className="font-semibold mb-2">{extracted.title}</h3>
+              <p className="text-sm text-muted line-clamp-3">{extracted.text}</p>
+
+              <details className="mt-5 rounded-xl border border-border p-4">
+                <summary className="cursor-pointer text-sm font-medium">Tune the voice and offer</summary>
+                <div className="grid sm:grid-cols-2 gap-4 mt-5">
+                  <div>
+                    <label htmlFor="brief-audience" className="text-sm text-muted">Target audience</label>
+                    <input id="brief-audience" maxLength={160} value={brief.audience} onChange={(event) => setBrief({ ...brief, audience: event.target.value })} placeholder="e.g. e-commerce founders" className="input-field mt-1" />
+                  </div>
+                  <div>
+                    <label htmlFor="brief-tone" className="text-sm text-muted">Tone</label>
+                    <select id="brief-tone" value={brief.tone} onChange={(event) => setBrief({ ...brief, tone: event.target.value as GenerationBrief['tone'] })} className="input-field mt-1">
+                      <option value="clear">Clear and practical</option>
+                      <option value="bold">Bold and direct</option>
+                      <option value="warm">Warm and approachable</option>
+                      <option value="technical">Technical and precise</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="brief-offer" className="text-sm text-muted">Offer or product</label>
+                    <input id="brief-offer" maxLength={200} value={brief.offer} onChange={(event) => setBrief({ ...brief, offer: event.target.value })} placeholder="Optional" className="input-field mt-1" />
+                  </div>
+                  <div>
+                    <label htmlFor="brief-cta" className="text-sm text-muted">Preferred call to action</label>
+                    <input id="brief-cta" maxLength={200} value={brief.cta} onChange={(event) => setBrief({ ...brief, cta: event.target.value })} placeholder="Optional" className="input-field mt-1" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label htmlFor="brief-banned" className="text-sm text-muted">Claims or phrases to avoid</label>
+                    <input id="brief-banned" maxLength={300} value={brief.bannedClaims} onChange={(event) => setBrief({ ...brief, bannedClaims: event.target.value })} placeholder="Optional" className="input-field mt-1" />
+                  </div>
+                </div>
+                <button type="button" onClick={saveBrandSettings} className="btn-secondary text-sm mt-5">Save as my default</button>
+                {brandNotice && <p role="status" className="text-sm text-muted mt-2">{brandNotice}</p>}
+              </details>
+
+              <div className="flex flex-wrap items-center gap-4 mt-5">
+                <button type="button" onClick={handleGenerate} disabled={loading !== 'idle'} className="btn-primary">
+                  {loading === 'generating' ? 'Creating drafts...' : 'Generate 4 draft formats'}
+                </button>
+                <span className="text-xs text-muted">One credit per completed generation</span>
+              </div>
+            </div>
+          )}
+          {error && <p role="alert" className="text-danger text-sm mt-4">{error}</p>}
+        </section>
+
+        <HistoryPanel refreshKey={historyKey} onOpen={(item) => {
+          setOutputs(item.outputs)
+          setGenerationId(item.id)
+          setDraftTitle(item.title)
+          setSaveNotice(null)
+          requestAnimationFrame(() => document.getElementById('workspace')?.scrollIntoView({ behavior: 'smooth' }))
+        }} />
       </div>
 
-      {/* Outputs */}
-      {outputs && (
-        <div className="flex flex-col gap-6">
-          <div className="glass-card p-6">
-            <h3 className="font-semibold mb-3">LinkedIn</h3>
-            <p className="text-sm whitespace-pre-wrap text-muted">{outputs.linkedin}</p>
-          </div>
-
-          <div className="glass-card p-6">
-            <h3 className="font-semibold mb-3">Twitter / X Thread</h3>
-            <div className="flex flex-col gap-3">
-              {outputs.twitter_thread.map((tweet: string, i: number) => (
-                <div key={i} className="flex gap-3">
-                  <span className="text-primary font-semibold text-sm shrink-0">{i + 1}</span>
-                  <p className="text-sm text-muted">{tweet}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="glass-card p-6">
-            <h3 className="font-semibold mb-3">Instagram Caption</h3>
-            <p className="text-sm text-muted mb-3">{outputs.instagram_caption}</p>
-            <div className="flex flex-wrap gap-2">
-              {outputs.instagram_hashtags.map((h: string, i: number) => (
-                <span
-                  key={i}
-                  className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full"
-                >
-                  #{h}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="glass-card p-6">
-            <h3 className="font-semibold mb-4">Quote Card Images</h3>
-            <div className="flex flex-wrap gap-4">
-              {outputs.quote_highlights.map((q: string, i: number) => (
-                <QuoteCard
-                  key={i}
-                  quote={q}
-                  imageDataUrl={quoteImages[i]?.imageDataUrl ?? null}
-                  error={quoteImages[i]?.error ?? null}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      {outputs && <OutputWorkspace outputs={outputs} onChange={(next) => { setOutputs(next); setSaveNotice(null) }}
+        title={draftTitle} onTitleChange={(next) => { setDraftTitle(next); setSaveNotice(null) }}
+        onSave={saveEdits} saving={saving} saveNotice={saveNotice} generationId={generationId} />}
+      <PublishingPlanner outputs={outputs} generationId={generationId} />
     </div>
   )
 }

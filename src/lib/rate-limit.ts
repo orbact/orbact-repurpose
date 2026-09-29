@@ -26,3 +26,14 @@ export const billingRateLimit = new Ratelimit({
   limiter: Ratelimit.slidingWindow(5, '1 m'),
   prefix: 'ratelimit:billing',
 })
+export const generateRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(5, '1 m'),
+  prefix: 'ratelimit:generate',
+})
+
+export const contactRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(3, '1 h'),
+  prefix: 'ratelimit:contact',
+})

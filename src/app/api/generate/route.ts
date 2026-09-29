@@ -1,69 +1,135 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { generateRepurposedContent } from '@/lib/ai/generate-content'
+import { MAX_INPUT_CHARS } from '@/lib/extract'
+import { readJsonBody, RequestBodyError } from '@/lib/http/read-json'
+import { generateRateLimit } from '@/lib/rate-limit'
+import { parseGenerationBrief } from '@/lib/ai/content-schema'
+import { ensureProfile } from '@/lib/supabase/profile'
+
+type Reservation = {
+  state: 'reserved' | 'pending' | 'complete' | 'failed' | 'limit'
+  id?: string
+  outputs?: unknown
+}
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await req.json().catch(() => null)
-  if (!body?.title || !body?.text) {
-    return NextResponse.json({ error: 'Missing title or text' }, { status: 400 })
-  }
-  const { title, text, sourceType } = body as { title: string; text: string; sourceType: string }
-
-  // Enforce usage limit BEFORE calling the AI — never spend money on a call you're going to reject
-  const { data: allowed, error: consumeError } = await supabase.rpc(
-    'try_consume_generation',
-    { p_user_id: user.id }
-  )
-
-  if (consumeError) {
-    return NextResponse.json({ error: 'Could not verify usage' }, { status: 500 })
-  }
-
-  if (!allowed) {
+  let body: unknown
+  try {
+    body = await readJsonBody(req)
+  } catch (error) {
+    const status = error instanceof RequestBodyError ? error.status : 400
     return NextResponse.json(
-      { error: 'Generation limit reached for your plan. Upgrade to continue.' },
-      { status: 403 }
+      { error: error instanceof Error ? error.message : 'Invalid request body' },
+      { status }
     )
   }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+  }
 
-  // Insert a pending row first — so even if generation fails, we have a record and can debug/retry
-  const { data: genRow, error: insertError } = await supabase
-    .from('generations')
-    .insert({
-      user_id: user.id,
-      input_type: sourceType || 'text',
-      input_raw: text.slice(0, 2000), // store a preview, not the full 40k chars, to keep rows lean
-      status: 'pending',
-    })
-    .select()
-    .single()
+  const values = body as Record<string, unknown>
+  const title = typeof values.title === 'string' ? values.title.trim() : ''
+  const sourceText = typeof values.text === 'string' ? values.text.trim() : ''
+  const sourceType = values.sourceType ?? 'text'
+  const requestId = values.requestId
+  const brief = parseGenerationBrief(values.brief ?? {
+    audience: '', tone: 'clear', offer: '', cta: '', bannedClaims: '',
+  })
+  if (!title || title.length > 200 || sourceText.length < 50 || sourceText.length > MAX_INPUT_CHARS) {
+    return NextResponse.json(
+      { error: 'Title must be 1–200 characters and text must be 50–14,000 characters.' },
+      { status: 400 }
+    )
+  }
+  if (sourceType !== 'url' && sourceType !== 'youtube' && sourceType !== 'text') {
+    return NextResponse.json({ error: 'Invalid source type' }, { status: 400 })
+  }
+  if (typeof requestId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId)) {
+    return NextResponse.json({ error: 'Invalid request ID' }, { status: 400 })
+  }
+  if (!brief) return NextResponse.json({ error: 'Invalid content brief' }, { status: 400 })
 
-  if (insertError || !genRow) {
-    return NextResponse.json({ error: 'Could not create generation record' }, { status: 500 })
+  try {
+    await ensureProfile(user)
+  } catch (error) {
+    console.error('Generation profile initialization failed', error)
+    return NextResponse.json({ error: 'Could not prepare your account. Please try again.' }, { status: 503 })
+  }
+
+  const { success } = await generateRateLimit.limit(user.id)
+  if (!success) {
+    return NextResponse.json({ error: 'Too many generations. Try again in a minute.' }, { status: 429 })
+  }
+
+  const admin = createAdminClient()
+  const { data, error: reserveError } = await admin.rpc('reserve_generation', {
+    p_user_id: user.id,
+    p_request_id: requestId,
+    p_title: title,
+    p_input_type: sourceType,
+    p_input_raw: sourceText,
+    p_brief: brief,
+  })
+  if (reserveError) {
+    console.error('Generation reservation failed', reserveError)
+    return NextResponse.json({ error: 'Could not reserve a generation.' }, { status: 503 })
+  }
+  const reservation = data as Reservation | null
+  if (!reservation) return NextResponse.json({ error: 'Could not reserve a generation.' }, { status: 503 })
+  if (reservation.state === 'limit') {
+    return NextResponse.json({ error: 'Generation limit reached for your plan.' }, { status: 403 })
+  }
+  if (reservation.state === 'complete') {
+    return NextResponse.json({ id: reservation.id, outputs: reservation.outputs })
+  }
+  if (reservation.state === 'pending') {
+    return NextResponse.json({ error: 'This generation is still processing. Check your history shortly.' }, { status: 409 })
+  }
+  if (reservation.state === 'failed') {
+    return NextResponse.json({ error: 'That attempt failed and its credit was refunded. Start a new attempt.' }, { status: 409 })
+  }
+  if (reservation.state !== 'reserved' || !reservation.id) {
+    return NextResponse.json({ error: 'Unexpected generation state.' }, { status: 503 })
   }
 
   try {
-    const outputs = await generateRepurposedContent(title, text)
-
-    await supabase
-      .from('generations')
-      .update({ outputs, status: 'complete' })
-      .eq('id', genRow.id)
-
-    return NextResponse.json({ id: genRow.id, outputs })
-  } catch (err) {
-    await supabase
-      .from('generations')
-      .update({ status: 'failed' })
-      .eq('id', genRow.id)
-
-    const message = err instanceof Error ? err.message : 'Generation failed'
+    const outputs = await generateRepurposedContent(title, sourceText, brief)
+    const { data: finishState, error: finishError } = await admin.rpc('finish_generation', {
+      p_user_id: user.id,
+      p_request_id: requestId,
+      p_outputs: outputs,
+      p_success: true,
+    })
+    if (finishError || finishState !== 'complete') throw finishError ?? new Error('Could not save generation')
+    return NextResponse.json({ id: reservation.id, outputs })
+  } catch (error) {
+    const { data: current } = await admin.rpc('reserve_generation', {
+      p_user_id: user.id,
+      p_request_id: requestId,
+      p_title: title,
+      p_input_type: sourceType,
+      p_input_raw: sourceText,
+      p_brief: brief,
+    })
+    const currentState = current as Reservation | null
+    if (currentState?.state === 'complete') {
+      return NextResponse.json({ id: currentState.id, outputs: currentState.outputs })
+    }
+    const { error: refundError } = await admin.rpc('finish_generation', {
+      p_user_id: user.id,
+      p_request_id: requestId,
+      p_outputs: null,
+      p_success: false,
+    })
+    if (refundError) console.error('Generation refund failed; stale reservation will be recovered', refundError)
+    const message = error instanceof Error ? error.message : 'Generation failed'
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

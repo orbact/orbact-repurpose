@@ -2,11 +2,11 @@ export default function TermsOfService() {
   return (
     <div style={{ maxWidth: 700, margin: '0 auto', padding: '60px 20px', color: '#f5f5f7' }}>
       <h1>Terms of Service</h1>
-      <p style={{ color: '#a0a0ab' }}>Last updated: {new Date().toLocaleDateString()}</p>
+      <p style={{ color: '#a0a0ab' }}>Last updated: September 29, 2026</p>
 
       <h2>1. Acceptance</h2>
       <p>
-        By using Orbact Repurpose, you agree to these Terms. If you don't agree, please don't use
+        By using Orbact Repurpose, you agree to these Terms. If you don&apos;t agree, please don&apos;t use
         the service.
       </p>
 
@@ -18,7 +18,7 @@ export default function TermsOfService() {
 
       <h2>3. Your Content</h2>
       <p>
-        You retain ownership of content you submit and outputs generated for you. You're
+        You retain ownership of content you submit and outputs generated for you. You&apos;re
         responsible for ensuring you have rights to any content you submit for processing.
       </p>
 
@@ -36,8 +36,8 @@ export default function TermsOfService() {
 
       <h2>6. Disclaimer</h2>
       <p>
-        The service is provided "as is." AI-generated outputs may contain errors or inaccuracies
-        — you're responsible for reviewing content before publishing it.
+        The service is provided &quot;as is.&quot; AI-generated outputs may contain errors or inaccuracies
+        — you&apos;re responsible for reviewing content before publishing it.
       </p>
 
       <h2>7. Limitation of Liability</h2>
