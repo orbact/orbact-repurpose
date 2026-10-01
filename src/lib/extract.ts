@@ -4,8 +4,8 @@ import { createBrotliDecompress, createGunzip, createInflate } from 'node:zlib'
 import { parseHTML } from 'linkedom'
 import { Readability } from '@mozilla/readability'
 import { fetchTranscript } from 'youtube-transcript-plus'
-import { assertSafeUrl, type SafeUrl } from './security/ssrf-guard'
-import { youtubeVideoUrl } from './source-url'
+import { assertSafeUrl, type SafeUrl } from './security/ssrf-guard.ts'
+import { youtubeVideoUrl } from './source-url.ts'
 
 export const MAX_INPUT_CHARS = 14000
 const MAX_HTML_BYTES = 2_000_000
@@ -32,8 +32,12 @@ function requestHtml(target: SafeUrl): Promise<FetchResult> {
         },
         // Use the address that passed validation, preventing a second DNS
         // lookup from connecting to a different address.
-        lookup: (_hostname, _options, callback) => {
-          callback(null, target.address, target.family)
+        lookup: (_hostname, options, callback) => {
+          if (options.all) {
+            callback(null, [{ address: target.address, family: target.family }])
+          } else {
+            callback(null, target.address, target.family)
+          }
         },
       },
       (response) => {
