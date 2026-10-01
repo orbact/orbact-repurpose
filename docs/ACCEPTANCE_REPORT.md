@@ -1,26 +1,26 @@
-# Prototype acceptance report — updated October 1, 2026
+# Prototype acceptance report — October 1, 2026
 
-This report distinguishes checks performed against the deployed sandbox, local checks, and launch work still open. No automatic social publishing or live billing was enabled during these checks.
+This report covers the deployed Vercel prototype and its connected free-tier services. Automatic Make publishing, paid checkout, AI-hosted image generation, and public email signup/recovery were intentionally disabled.
 
 ## Passed
 
-- On October 1, the local release candidate passed 15 tests, lint, a production build, and a live Groq smoke response with distinct LinkedIn, Facebook Page, X, Instagram, carousel, and image-prompt fields. The existing Supabase project also passed the database schema check. These local checks do not mean the revised code is deployed.
+- Vercel Production deployed and marked Ready for commit `2b18a00`. Public routes loaded. Anonymous generation, calendar, extraction, and publishing cron requests were denied. Paid checkout and the optional AI image endpoint returned unavailable as configured.
+- The existing Supabase Free project passed schema and live sandbox checks. Two temporary confirmed users received separate Free profiles with 0/3 credits. RLS prevented reading another user's data or editing billing fields. Duplicate credit reservation did not charge twice; a failed reservation refunded once. Service-only calendar operations worked. Temporary accounts and rows were removed.
+- A live Google sign-in for an existing Orbact Google identity returned to the authenticated dashboard. A new Google identity was not separately tested. Existing email login remains available; email signup and recovery controls are hidden while custom SMTP is absent.
+- In the live dashboard, pasted source text produced LinkedIn, X, Facebook Page, Instagram, and carousel drafts. Credits changed from 0/3 to 1/3; a saved edit appeared in the library. The sample remained on the founder's account for review.
+- A live public article URL, `https://orbact-repurpose.vercel.app/services/automation`, extracted 677 characters after fixing the pinned DNS lookup. A direct local HTTPS extraction also passed. No generation credit was used for the URL test.
+- A manual Facebook Page calendar item was created and displayed, then removed after the test. No test item remains planned.
+- A temporary contact inquiry reached `agency_inquiries` and was removed. Groq showed a Free plan and supplied a real generation response. Upstash showed Free Tier in Frankfurt with usage within its quota.
+- Local checks passed: 15 tests, lint, production build, `npm run ai:check`, and the Supabase acceptance script. Recent Vercel logs showed zero errors during the inspected interval.
 
-- Local `npm test`, `npm run lint`, and `npm run build` pass. The tests cover renewal period selection, duplicate/proration billing behavior, content validation, URL safety, Make host restrictions, platform allowlisting, and publisher response validation.
-- The deployed public pages (`/`, `/login`, `/services`, `/contact`, `/privacy`, `/terms`) returned HTTP 200. Anonymous generation, calendar, extraction, and publishing cron requests were denied with HTTP 401.
-- A temporary confirmed sandbox user signed in and generated four draft formats from pasted text. The app recorded one of three free credits and displayed the drafts in history.
-- Two temporary sandbox users were isolated by Supabase RLS. Authenticated clients could not edit billing fields or invoke service-only credit/queue functions. A repeated reservation did not charge twice; a failed generation refunded once. Service-only calendar operations succeeded. The temporary users and rows created by the repeatable database test were removed.
-- A sandbox contact submission reached the inquiries table; its temporary row was removed.
+Repeatable checks live in [`scripts/verify-supabase-acceptance.mjs`](../scripts/verify-supabase-acceptance.mjs) and [`scripts/verify-deployed-smoke.mjs`](../scripts/verify-deployed-smoke.mjs). They mutate only the configured sandbox and require `ACCEPTANCE_ALLOW_TEST_MUTATIONS=yes`.
 
-The repeatable checks live in [`scripts/verify-supabase-acceptance.mjs`](../scripts/verify-supabase-acceptance.mjs) and [`scripts/verify-deployed-smoke.mjs`](../scripts/verify-deployed-smoke.mjs). They mutate only the configured sandbox and require `ACCEPTANCE_ALLOW_TEST_MUTATIONS=yes`.
+## Limits and deferred work
 
-## Open before a public launch
+- The generated sample initially described a proposed consulting workflow as completed work. The saved draft was corrected, and the prompt now requires hypothetical language and correct attribution for third-party examples. AI copy still needs human review before posting.
+- Browser download controls for Markdown, JSON, JPEG, and PNG appeared, but downloaded files were not inspected in this acceptance pass. Captioned YouTube extraction, real API fault refunds, responsive layout, and a brand-new Google user's first sign-in were not independently verified.
+- Vercel Hobby is being used only for the prototype. Commercial paid launch requires hosting or a plan that permits the intended use. Existing sandbox Stripe links require a deliberate migration and live billing acceptance; paid checkout stays disabled. Custom SMTP is required before enabling email signup and password recovery.
+- Make publishing remains deferred and disabled. Its scenario and all social-posting checks are outside this app acceptance pass. X delivery remains manual under the zero-cost policy.
+- The founder must review the Privacy Policy and Terms for the operating entity, jurisdiction, retention terms, and support details before inviting external users.
 
-- Complete email confirmation and password-reset flows with production SMTP; test Google sign-in only if enabled.
-- Recheck generation quality against live articles and captioned YouTube videos. A sandbox draft phrased a proposed workflow as completed work; the prompt has been tightened and a proposed-workflow smoke response passed locally, but it needs deployed verification and editorial review. Check extraction failures and credit refunds under real API faults.
-- Verify editing, save, export, carousel download, manual calendar, and responsive layouts with a real browser session. The calendar date input was not reliably driven by the browser automation tool, so no end-to-end manual reminder result is claimed yet.
-- Keep Stripe in test mode until the separate live cutover is approved and tested. The sandbox webhook, renewal, failure/recovery, duplicate, and event-order checks were completed earlier; this report does not treat those as live billing acceptance.
-- The dedicated Make scenario has saved LinkedIn company Page, Facebook **Orbact** Page, and Instagram `@orbactco` posting modules, route filters, OAuth connections, and `published` responses. It remains Inactive. LinkedIn requires account ID `urn:li:organization:110322412`, Facebook `1285625971308849`, and Instagram `17841427101004323`. A publishing-receipts Data Store exists. Its no-overwrite `jobId` claim and an unfinished Instagram success-update module are in an unsaved Make editor draft; further receipt updates and duplicate handling remain. A no-key request returned HTTP 401; an authorized webhook request, real posts, duplicate delivery, platform rejection, and timeout were not tested. Keep app managed publishing disabled until these pass. X's official posting API requires prepaid credits, so its delivery remains manual under the zero-cost policy.
-- Decide on hosting that permits commercial SaaS use before accepting paying customers. Vercel Hobby is suitable here only for the free prototype. Review the privacy/terms drafts for the operating jurisdiction and data retention policy.
-
-See [`PLATFORM_SETUP.md`](PLATFORM_SETUP.md) for the exact external steps and [`MAKE_PUBLISHING_CONTRACT.md`](MAKE_PUBLISHING_CONTRACT.md) for the publishing request/response contract.
+See [`APP_RELEASE_READINESS.md`](APP_RELEASE_READINESS.md) for deployment configuration and [`PLATFORM_SETUP.md`](PLATFORM_SETUP.md) for later external setup.
