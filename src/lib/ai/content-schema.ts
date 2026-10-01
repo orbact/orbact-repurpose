@@ -6,9 +6,11 @@ export type CarouselSlideContent = {
 
 export type GeneratedContent = {
   linkedin: string
+  facebook_post?: string
   twitter_thread: string[]
   instagram_caption: string
   instagram_hashtags: string[]
+  image_prompt?: string
   carousel: {
     cover: { headline: string; accent: string }
     slides: CarouselSlideContent[]
@@ -52,8 +54,9 @@ function clean(value: unknown, max: number): string | null {
 export function parseGeneratedContent(value: unknown): GeneratedContent | null {
   const data = record(value)
   const linkedin = clean(data?.linkedin, 5000)
+  const facebookPost = data?.facebook_post === undefined ? undefined : clean(data.facebook_post, 5000)
   const instagramCaption = clean(data?.instagram_caption, 2200)
-  if (!linkedin || !instagramCaption) return null
+  if (!linkedin || facebookPost === null || !instagramCaption) return null
 
   if (!Array.isArray(data?.twitter_thread) ||
       data.twitter_thread.length < 3 || data.twitter_thread.length > 8) return null
@@ -66,6 +69,9 @@ export function parseGeneratedContent(value: unknown): GeneratedContent | null {
     typeof item === 'string' ? item.trim().replace(/^#/, '').toLowerCase() : ''
   )
   if (hashtags.some((tag) => !/^[\p{L}\p{N}_]{2,40}$/u.test(tag))) return null
+
+  const imagePrompt = data?.image_prompt === undefined ? undefined : clean(data.image_prompt, 300)
+  if (imagePrompt === null) return null
 
   const carousel = record(data?.carousel)
   const cover = record(carousel?.cover)
@@ -86,9 +92,11 @@ export function parseGeneratedContent(value: unknown): GeneratedContent | null {
   if (closing === null) return null
   return {
     linkedin,
+    ...(facebookPost ? { facebook_post: facebookPost } : {}),
     twitter_thread: twitterThread as string[],
     instagram_caption: instagramCaption,
     instagram_hashtags: hashtags,
+    ...(imagePrompt ? { image_prompt: imagePrompt } : {}),
     carousel: {
       cover: { headline: coverHeadline, accent: coverAccent },
       slides: slides as CarouselSlideContent[],

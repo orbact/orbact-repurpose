@@ -7,9 +7,9 @@ export default function PrivacyPolicy() {
       <h2>1. What We Collect</h2>
       <p>
         When you use Orbact Repurpose, we collect: your email address (for account access),
-        content you submit for repurposing (URLs, text, or video links), and generated outputs
-        stored in your account history. We use Stripe to process payments and do not store your
-        card details ourselves.
+        content you submit for repurposing (URLs, text, or video links), a saved source excerpt,
+        your brand brief, generated outputs, and usage records in your account. If paid billing
+        is enabled, Stripe processes payments; Orbact does not store card details.
       </p>
       <p>
         If you send an Orbact project inquiry, we collect your name, email, optional company,
@@ -19,21 +19,23 @@ export default function PrivacyPolicy() {
       <h2>2. How We Use It</h2>
       <p>
         We use your data to operate the service: authenticating you, processing your content
-        through third-party AI providers to generate outputs, tracking your usage against your
-        plan limits, and billing you via Stripe.
+        through an AI provider to generate outputs, tracking your usage against your plan
+        limits, and handling billing when paid plans are available.
       </p>
 
       <h2>3. Third-Party Services</h2>
       <p>
-        We use Supabase (database and authentication), Groq (AI text generation),
-        and Stripe (payment processing) to operate this service. Content
-        you submit is sent to these providers as part of generating your outputs.
+        Supabase stores accounts, saved drafts, and project inquiries. Groq receives your source
+        text and brief to create draft content. Upstash stores rate-limit counters. Our hosting
+        provider receives normal web requests. If you choose optional AI artwork, its prompt is
+        sent to the connected image provider. Stripe handles billing only when paid plans are enabled.
       </p>
 
       <h2>4. Data Retention</h2>
       <p>
         Saved generations remain in your account until you delete an individual draft or request
-        account deletion by contacting us. Deleting a draft does not restore a used credit.
+        account deletion by contacting us. Project inquiries remain available to Orbact for
+        follow-up. Deleting a draft does not restore a used credit.
       </p>
 
       <h2>5. Your Rights</h2>

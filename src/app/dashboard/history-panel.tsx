@@ -39,6 +39,8 @@ export default function HistoryPanel({
 
   async function remove(id: string) {
     if (!window.confirm('Delete this saved draft? This does not restore a used generation credit.')) return
+    setError(null)
+    try {
     const response = await fetch('/api/generations', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
@@ -50,6 +52,9 @@ export default function HistoryPanel({
       return
     }
     setItems((current) => current.filter((item) => item.id !== id))
+    } catch {
+      setError('Connection interrupted. Could not delete the draft.')
+    }
   }
 
   return (

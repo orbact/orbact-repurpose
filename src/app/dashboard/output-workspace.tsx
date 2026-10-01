@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { GeneratedContent } from '@/lib/ai/content-schema'
+import ImageStudio from './image-studio'
 
 function download(name: string, content: string, type: string) {
   const url = URL.createObjectURL(new Blob([content], { type }))
@@ -71,7 +72,7 @@ function downloadCarouselSlide(headline: string, body: string, index: number) {
 }
 
 export default function OutputWorkspace({
-  outputs, onChange, title, onTitleChange, onSave, saving, saveNotice, generationId,
+  outputs, onChange, title, onTitleChange, onSave, saving, saveNotice, generationId, imageGenerationEnabled,
 }: {
   outputs: GeneratedContent
   onChange: (outputs: GeneratedContent) => void
@@ -81,6 +82,7 @@ export default function OutputWorkspace({
   saving: boolean
   saveNotice: string | null
   generationId: string | null
+  imageGenerationEnabled: boolean
 }) {
   const [copied, setCopied] = useState<string | null>(null)
   const [copyError, setCopyError] = useState<string | null>(null)
@@ -99,9 +101,11 @@ export default function OutputWorkspace({
     const markdown = [
       '# ' + title,
       '## LinkedIn', outputs.linkedin,
+      ...(outputs.facebook_post ? ['## Facebook Page', outputs.facebook_post] : []),
       '## X thread', ...outputs.twitter_thread.map((tweet, index) => String(index + 1) + '. ' + tweet),
       '## Instagram', outputs.instagram_caption,
       outputs.instagram_hashtags.map((tag) => '#' + tag).join(' '),
+      ...(outputs.image_prompt ? ['## Visual direction', outputs.image_prompt] : []),
       '## Carousel',
       'Cover: ' + outputs.carousel.cover.headline + ' ' + outputs.carousel.cover.accent,
       ...outputs.carousel.slides.map((slide, index) =>
@@ -163,6 +167,16 @@ export default function OutputWorkspace({
           </div>
         </article>
 
+        {outputs.facebook_post !== undefined && <article className="glass-card p-6 lg:col-span-2">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <h3 className="text-lg font-semibold">Facebook Page</h3>
+            <button type="button" onClick={() => copy('facebook', outputs.facebook_post || '')} className="btn-secondary text-xs">{copied === 'facebook' ? 'Copied' : 'Copy'}</button>
+          </div>
+          <label htmlFor="facebook-output" className="sr-only">Facebook Page post</label>
+          <textarea id="facebook-output" value={outputs.facebook_post} onChange={(event) => onChange({ ...outputs, facebook_post: event.target.value })} rows={7} className={fieldClass} />
+          <p className="text-xs text-muted mt-2">{outputs.facebook_post.length} characters</p>
+        </article>}
+
         <article className="glass-card p-6 lg:col-span-2">
           <div className="flex items-center justify-between gap-3 mb-4">
             <h3 className="text-lg font-semibold">Instagram</h3>
@@ -222,6 +236,7 @@ export default function OutputWorkspace({
           )}
         </div>
       </article>
+      <ImageStudio key={generationId ?? 'draft'} outputs={outputs} aiEnabled={imageGenerationEnabled} />
     </section>
   )
 }

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { parseGenerationBrief } from '@/lib/ai/content-schema'
 import { readJsonBody, RequestBodyError } from '@/lib/http/read-json'
+import { ensureProfile } from '@/lib/supabase/profile'
 
 export async function PUT(req: NextRequest) {
   const supabase = await createClient()
@@ -19,10 +20,18 @@ export async function PUT(req: NextRequest) {
   }
   const brief = parseGenerationBrief(value)
   if (!brief) return NextResponse.json({ error: 'Invalid brand settings' }, { status: 400 })
-  const { error } = await createAdminClient()
+  try {
+    await ensureProfile(user)
+  } catch (error) {
+    console.error('Brand profile initialization failed', error)
+    return NextResponse.json({ error: 'Could not prepare your account.' }, { status: 503 })
+  }
+  const { data, error } = await createAdminClient()
     .from('profiles')
     .update({ brand_brief: brief })
     .eq('id', user.id)
-  if (error) return NextResponse.json({ error: 'Could not save brand settings' }, { status: 503 })
+    .select('id')
+    .single()
+  if (error || !data) return NextResponse.json({ error: 'Could not save brand settings' }, { status: 503 })
   return NextResponse.json({ saved: true })
 }

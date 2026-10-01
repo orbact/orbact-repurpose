@@ -1,12 +1,16 @@
 import { billingRateLimit } from '@/lib/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { stripe, PLAN_PRICES } from '@/lib/stripe'
+import { getStripe, PLAN_PRICES } from '@/lib/stripe'
+import { billingMode } from '@/lib/billing/config'
 import { getSiteUrl } from '@/lib/site-url'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ensureProfile } from '@/lib/supabase/profile'
 
 export async function POST(req: NextRequest) {
+  if (billingMode() === 'disabled') {
+    return NextResponse.json({ error: 'Paid plans are not available yet.' }, { status: 503 })
+  }
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
@@ -42,6 +46,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const stripe = getStripe()
     const origin = getSiteUrl()
     let customerId = profile.stripe_customer_id as string | null
 

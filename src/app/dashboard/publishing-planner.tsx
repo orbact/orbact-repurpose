@@ -19,7 +19,7 @@ function contentFor(platform: Platform, outputs: GeneratedContent): string {
   if (platform === 'linkedin') return outputs.linkedin
   if (platform === 'x') return outputs.twitter_thread.join('\n\n')
   if (platform === 'instagram') return outputs.instagram_caption + '\n\n' + outputs.instagram_hashtags.map((tag) => '#' + tag).join(' ')
-  return outputs.linkedin
+  return outputs.facebook_post || outputs.linkedin
 }
 
 export default function PublishingPlanner({
@@ -119,7 +119,7 @@ export default function PublishingPlanner({
       if (!response.ok) throw new Error(body.error || 'Could not add to calendar')
       setNotice(deliveryMode === 'managed'
         ? 'Approved and queued. Review its publishing status here.'
-        : 'Added to your calendar. Copy and publish it manually on the planned date.')
+        : 'Added to your calendar. Check this page on the planned date, then copy and publish it manually.')
       setRefreshKey((key) => key + 1)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not add this plan.')
@@ -177,7 +177,7 @@ export default function PublishingPlanner({
           <div>
             <label htmlFor="delivery-mode" className="block text-sm text-muted mb-2">Delivery</label>
             <select id="delivery-mode" value={deliveryMode} onChange={(event) => setDeliveryMode(event.target.value as 'manual' | 'managed')} className="input-field">
-              <option value="manual">Manual reminder</option>
+              <option value="manual">Manual plan</option>
               {connected.includes(platform) && <option value="managed">Publish automatically</option>}
             </select>
           </div>

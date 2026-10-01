@@ -14,15 +14,20 @@ export default function ForgotPasswordPage() {
     event.preventDefault()
     setBusy(true)
     setError(null)
-    const { error } = await createClient().auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
-    })
-    setBusy(false)
-    if (error) {
-      setError(error.message)
-      return
+    try {
+      const { error } = await createClient().auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+      })
+      if (error) {
+        setError(error.message)
+        return
+      }
+      setSent(true)
+    } catch {
+      setError('Could not connect to password reset. Please try again.')
+    } finally {
+      setBusy(false)
     }
-    setSent(true)
   }
 
   return (

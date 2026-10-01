@@ -7,6 +7,7 @@ import { UpgradeButtons, ManageBillingButton } from './upgrade-buttons'
 import SignOutButton from './sign-out-button'
 import { parseGenerationBrief } from '@/lib/ai/content-schema'
 import { ensureProfile } from '@/lib/supabase/profile'
+import { billingMode } from '@/lib/billing/config'
 
 export default async function DashboardPage({
   searchParams,
@@ -29,6 +30,8 @@ export default async function DashboardPage({
   const usagePercent = profile
     ? Math.min(100, (profile.generations_used / Math.max(1, profile.generations_limit)) * 100)
     : 0
+  const billing = billingMode()
+  const sandboxSubscription = Boolean(profile?.stripe_subscription_id && process.env.STRIPE_SECRET_KEY?.startsWith('sk_test_'))
 
   return (
     <div className="min-h-screen relative overflow-hidden">
@@ -59,6 +62,8 @@ export default async function DashboardPage({
           </div>
           {checkout === 'success' && <p role="status" className="rounded-xl border border-success/30 bg-success/10 text-success text-sm p-4 mb-6">Checkout completed. Your plan will appear here as soon as Stripe confirms it.</p>}
           {checkout === 'cancelled' && <p role="status" className="rounded-xl border border-border bg-white/5 text-muted text-sm p-4 mb-6">Checkout was cancelled. Your current plan is unchanged.</p>}
+          {billing === 'test' && <p role="status" className="rounded-xl border border-warning/30 bg-warning/10 text-warning text-sm p-4 mb-6">Billing test mode is active. Checkout uses Stripe test payments.</p>}
+          {sandboxSubscription && billing === 'disabled' && <p role="status" className="rounded-xl border border-warning/30 bg-warning/10 text-warning text-sm p-4 mb-6">This account has an existing Stripe test subscription. You can manage that test subscription, while new checkout is paused.</p>}
           {!profile && <p role="alert" className="rounded-xl border border-danger/30 bg-danger/10 text-danger text-sm p-4 mb-6">Your account could not be loaded. Please try again shortly.</p>}
           {/* Account summary card */}
           <div className="glass-card p-6 mb-8">
@@ -83,7 +88,9 @@ export default async function DashboardPage({
               </div>
 
               <div>
-                {profile && (profile.stripe_subscription_id ? <ManageBillingButton /> : <UpgradeButtons />)}
+                {profile && (profile.stripe_subscription_id
+                  ? <ManageBillingButton />
+                  : billing === 'disabled' ? <p className="text-xs text-muted">Paid plans are coming soon.</p> : <UpgradeButtons />)}
               </div>
             </div>
 
@@ -102,7 +109,10 @@ export default async function DashboardPage({
             )}
           </div>
 
-          <ExtractTest initialBrief={parseGenerationBrief(profile?.brand_brief)} />
+          <ExtractTest
+            initialBrief={parseGenerationBrief(profile?.brand_brief)}
+            imageGenerationEnabled={process.env.ENABLE_QUOTE_IMAGES === 'true' && Boolean(process.env.POLLINATIONS_API_KEY)}
+          />
         </div>
       </div>
     </div>

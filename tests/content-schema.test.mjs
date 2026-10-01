@@ -29,6 +29,8 @@ test('accepts a complete output and removes literal Markdown emphasis', () => {
 })
 
 test('rejects oversized posts and malformed brief fields', () => {
+  assert.equal(parseGeneratedContent({ ...valid, facebook_post: 'x'.repeat(5001) }), null)
+  assert.equal(parseGeneratedContent({ ...valid, facebook_post: 'Facebook Page draft' })?.facebook_post, 'Facebook Page draft')
   assert.equal(parseGeneratedContent({
     ...valid, twitter_thread: ['a'.repeat(281), 'short', 'short'],
   }), null)

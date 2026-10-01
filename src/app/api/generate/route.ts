@@ -8,6 +8,8 @@ import { generateRateLimit } from '@/lib/rate-limit'
 import { parseGenerationBrief } from '@/lib/ai/content-schema'
 import { ensureProfile } from '@/lib/supabase/profile'
 
+export const maxDuration = 60
+
 type Reservation = {
   state: 'reserved' | 'pending' | 'complete' | 'failed' | 'limit'
   id?: string
@@ -93,7 +95,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'This generation is still processing. Check your history shortly.' }, { status: 409 })
   }
   if (reservation.state === 'failed') {
-    return NextResponse.json({ error: 'That attempt failed and its credit was refunded. Start a new attempt.' }, { status: 409 })
+    return NextResponse.json({
+      error: 'That attempt failed and its credit was refunded. Start a new attempt.',
+      creditRefunded: true,
+    }, { status: 409 })
   }
   if (reservation.state !== 'reserved' || !reservation.id) {
     return NextResponse.json({ error: 'Unexpected generation state.' }, { status: 503 })
@@ -122,14 +127,23 @@ export async function POST(req: NextRequest) {
     if (currentState?.state === 'complete') {
       return NextResponse.json({ id: currentState.id, outputs: currentState.outputs })
     }
-    const { error: refundError } = await admin.rpc('finish_generation', {
+    const { data: refundState, error: refundError } = await admin.rpc('finish_generation', {
       p_user_id: user.id,
       p_request_id: requestId,
       p_outputs: null,
       p_success: false,
     })
-    if (refundError) console.error('Generation refund failed; stale reservation will be recovered', refundError)
-    const message = error instanceof Error ? error.message : 'Generation failed'
-    return NextResponse.json({ error: message }, { status: 500 })
+    console.error('Generation failed', error)
+    if (refundError || refundState !== 'failed') {
+      console.error('Generation refund could not be confirmed; stale reservation will be recovered', refundError)
+      return NextResponse.json({
+        error: 'Could not confirm this attempt. Check your history, then retry the same request.',
+        creditRefunded: false,
+      }, { status: 503 })
+    }
+    return NextResponse.json({
+      error: 'Content creation failed. Your credit was refunded; please try again.',
+      creditRefunded: true,
+    }, { status: 502 })
   }
 }

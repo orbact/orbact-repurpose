@@ -6,7 +6,12 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 
-export default function LoginForm({ callbackError }: { callbackError: boolean }) {
+export default function LoginForm({ callbackError, googleEnabled, emailSignupEnabled, passwordResetEnabled }: {
+  callbackError: boolean
+  googleEnabled: boolean
+  emailSignupEnabled: boolean
+  passwordResetEnabled: boolean
+}) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [mode, setMode] = useState<'login' | 'signup'>('login')
@@ -24,39 +29,48 @@ export default function LoginForm({ callbackError }: { callbackError: boolean })
     setNotice(null)
     setLoading(true)
 
-    const { data, error } =
-      mode === 'login'
+    try {
+      const { data, error } = mode === 'login'
         ? await supabase.auth.signInWithPassword({ email, password })
         : await supabase.auth.signUp({
-            email,
-            password,
-            options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-          })
-
-    setLoading(false)
-
-    if (error) {
-      setError(error.message)
-      return
+          email,
+          password,
+          options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+        })
+      if (error) {
+        setError(error.message)
+        return
+      }
+      if (mode === 'signup' && !data.session) {
+        setNotice('Check your email for a confirmation link, then log in.')
+        return
+      }
+      router.push('/dashboard')
+      router.refresh()
+    } catch {
+      setError('Could not connect to sign-in. Please try again.')
+    } finally {
+      setLoading(false)
     }
-    if (mode === 'signup' && !data.session) {
-      setNotice('Check your email for a confirmation link, then log in.')
-      return
-    }
-    router.push('/dashboard')
-    router.refresh()
   }
 
   async function handleGoogleLogin() {
     setError(null)
     setNotice(null)
     setLoading(true)
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
-    })
-    if (error) setError(error.message)
-    setLoading(false)
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: `${window.location.origin}/auth/callback`, skipBrowserRedirect: true },
+      })
+      if (error) setError(error.message)
+      else if (data.url) window.location.assign(data.url)
+      else setError('Could not start Google sign-in. Please try again.')
+    } catch {
+      setError('Could not connect to Google sign-in. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -74,13 +88,20 @@ export default function LoginForm({ callbackError }: { callbackError: boolean })
 
         <div className="glass-card p-8">
           <h1 className="text-xl font-semibold mb-1 text-center">
-            {mode === 'login' ? 'Welcome back' : 'Create your account'}
+            {mode === 'login' ? 'Sign in to Orbact' : 'Create your account'}
           </h1>
-          <p className="text-sm text-muted text-center mb-6">
-            {mode === 'login'
-              ? 'Log in to keep repurposing your content'
-              : 'Start with 3 free generations'}
-          </p>
+          <p className="text-sm text-muted text-center mb-6">{mode === 'signup'
+            ? 'Start with 3 free generations'
+            : googleEnabled ? 'Continue with Google, or sign in with your existing email account.' : 'Log in to keep repurposing your content'}</p>
+
+          {googleEnabled && <><button type="button" onClick={handleGoogleLogin} disabled={loading} className="btn-primary w-full">
+            {loading ? 'Please wait...' : 'Continue with Google'}
+          </button>
+          <div className="flex items-center gap-3 my-5">
+            <div className="flex-1 h-px bg-border" />
+            <span className="text-xs text-muted">or use email</span>
+            <div className="flex-1 h-px bg-border" />
+          </div></>}
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
             <label htmlFor="email" className="text-sm font-medium">Email</label>
@@ -101,7 +122,7 @@ export default function LoginForm({ callbackError }: { callbackError: boolean })
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              minLength={6}
+              minLength={mode === 'signup' ? 8 : undefined}
               className="input-field"
             />
 
@@ -113,23 +134,13 @@ export default function LoginForm({ callbackError }: { callbackError: boolean })
             </button>
           </form>
 
-          {mode === 'login' && (
+          {mode === 'login' && passwordResetEnabled && (
             <Link href="/forgot-password" className="block text-sm text-muted hover:text-foreground mt-4 text-right">
               Forgot password?
             </Link>
           )}
 
-          <div className="flex items-center gap-3 my-5">
-            <div className="flex-1 h-px bg-border" />
-            <span className="text-xs text-muted">or</span>
-            <div className="flex-1 h-px bg-border" />
-          </div>
-
-          <button type="button" onClick={handleGoogleLogin} disabled={loading} className="btn-secondary w-full">
-            Continue with Google
-          </button>
-
-          <button
+          {emailSignupEnabled && <button
             onClick={() => {
               setMode(mode === 'login' ? 'signup' : 'login')
               setError(null)
@@ -138,7 +149,7 @@ export default function LoginForm({ callbackError }: { callbackError: boolean })
             className="text-sm text-muted hover:text-foreground transition-colors mt-6 w-full text-center"
           >
             {mode === 'login' ? "Need an account? Sign up" : 'Have an account? Log in'}
-          </button>
+          </button>}
         </div>
       </div>
     </div>

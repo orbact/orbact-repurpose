@@ -24,7 +24,7 @@ export const extractRateLimit = new Ratelimit({
 
 export const quoteImageRateLimit = new Ratelimit({
   redis,
-  limiter: Ratelimit.slidingWindow(10, '1 m'),
+  limiter: Ratelimit.slidingWindow(3, '1 d'),
   prefix: `${prefix}:quote-image`,
 })
 

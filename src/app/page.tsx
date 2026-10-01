@@ -1,14 +1,16 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { SERVICES } from '@/lib/services'
+import { billingMode } from '@/lib/billing/config'
 
 const plans = [
-  { name: 'Free', price: '$0', detail: 'Try the workflow', credits: '3 total generations', features: ['All four draft formats', 'Editable drafts and exports', 'Saved draft history'], featured: false },
+  { name: 'Free', price: '$0', detail: 'Try the workflow', credits: '3 total generations', features: ['All five draft formats', 'Editable drafts and exports', 'Saved draft history'], featured: false },
   { name: 'Starter', price: '$19', detail: 'For a steady content rhythm', credits: '30 generations / month', features: ['Everything in Free', 'Credits renew each paid period', 'Manage billing in Stripe'], featured: true },
   { name: 'Pro', price: '$49', detail: 'For higher volume', credits: '150 generations / month', features: ['Everything in Starter', 'More room for campaigns', 'The same review-first workflow'], featured: false },
 ]
 
 export default function LandingPage() {
+  const billing = billingMode()
   return (
     <div className="min-h-screen relative overflow-hidden">
       <div className="gradient-orb orb-violet w-[640px] h-[640px] -top-48 -left-40" />
@@ -42,7 +44,7 @@ export default function LandingPage() {
                 One idea. <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-300 via-violet-400 to-cyan-300">Many ways</span> to show up.
               </h1>
               <p className="text-lg md:text-xl text-muted max-w-xl mt-7 leading-relaxed">
-                Turn a useful article, video transcript, or original text into editable LinkedIn, X, Instagram, and carousel drafts.
+                Turn a useful article, video transcript, or original text into editable LinkedIn, Facebook Page, X, Instagram, and carousel drafts.
               </p>
               <div className="flex flex-wrap gap-3 mt-9">
                 <Link href="/login" className="btn-primary inline-flex items-center gap-2">Create your first drafts <span aria-hidden>↗</span></Link>
@@ -69,6 +71,7 @@ export default function LandingPage() {
                   <div className="grid grid-cols-2 gap-3">
                     {[
                       ['LinkedIn', 'A thoughtful post with a clear point of view.'],
+                      ['Facebook Page', 'A direct, useful update for your community.'],
                       ['X', 'A focused thread that builds one idea at a time.'],
                       ['Instagram', 'A punchy caption and relevant hashtags.'],
                       ['Carousel', 'A visual sequence with downloadable slides.'],
@@ -134,7 +137,7 @@ export default function LandingPage() {
               <div className="text-center mb-12">
                 <p className="text-xs uppercase tracking-[0.25em] text-primary mb-4">Simple pricing</p>
                 <h2 className="text-3xl md:text-5xl font-bold tracking-tight">Pick your publishing pace.</h2>
-                <p className="text-muted mt-4">One completed generation creates the four draft formats shown above.</p>
+                <p className="text-muted mt-4">One completed generation creates the five draft formats shown above.</p>
               </div>
               <div className="grid md:grid-cols-3 gap-5">
                 {plans.map((plan) => (
@@ -146,11 +149,13 @@ export default function LandingPage() {
                     <ul className="space-y-3 text-sm text-muted mt-6 mb-8">
                       {plan.features.map((feature) => <li key={feature}>✓ &nbsp;{feature}</li>)}
                     </ul>
-                    <Link href="/login" className={plan.featured ? 'btn-primary text-center mt-auto' : 'btn-secondary text-center mt-auto'}>{plan.name === 'Free' ? 'Start free' : 'Choose ' + plan.name}</Link>
+                    {plan.name !== 'Free' && billing === 'disabled'
+                      ? <span className="btn-secondary text-center mt-auto opacity-60 cursor-not-allowed">Coming soon</span>
+                      : <Link href="/login" className={plan.featured ? 'btn-primary text-center mt-auto' : 'btn-secondary text-center mt-auto'}>{plan.name === 'Free' ? 'Start free' : 'Choose ' + plan.name}</Link>}
                   </div>
                 ))}
               </div>
-              <p className="text-xs text-muted text-center mt-6">Subscription billing and cancellation are handled through Stripe. Credits reset after a paid renewal.</p>
+              <p className="text-xs text-muted text-center mt-6">{billing === 'disabled' ? 'Start with three free generations. Paid plans will open after billing setup is complete.' : billing === 'test' ? 'Paid plan checkout is in test mode. No real payment will be collected.' : 'Subscription billing and cancellation are handled through Stripe. Credits reset after a paid renewal.'}</p>
             </div>
           </section>
 

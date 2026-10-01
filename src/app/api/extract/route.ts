@@ -2,9 +2,11 @@ import { extractRateLimit } from '@/lib/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { extractFromUrl, extractFromYoutube, extractFromText, MAX_INPUT_CHARS } from '@/lib/extract'
+import { normalizeSourceUrl, sourceTypeForUrl } from '@/lib/source-url'
 import { readJsonBody, RequestBodyError } from '@/lib/http/read-json'
 
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -51,12 +53,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result =
-      type === 'url'
-        ? await extractFromUrl(input)
-        : type === 'youtube'
-          ? await extractFromYoutube(input)
-          : extractFromText(input)
+    const normalizedInput = type === 'text' ? input : normalizeSourceUrl(input)
+    const effectiveType = type === 'url' ? sourceTypeForUrl(normalizedInput) : type
+    const result = effectiveType === 'youtube'
+      ? await extractFromYoutube(normalizedInput)
+      : effectiveType === 'url'
+        ? await extractFromUrl(normalizedInput)
+        : extractFromText(input)
     return NextResponse.json(result)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Extraction failed'

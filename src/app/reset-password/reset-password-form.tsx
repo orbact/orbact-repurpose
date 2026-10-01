@@ -19,15 +19,20 @@ export default function ResetPasswordForm() {
       return
     }
     setBusy(true)
-    const { error } = await createClient().auth.updateUser({ password })
-    setBusy(false)
-    if (error) {
-      setError(error.message)
-      return
+    try {
+      const { error } = await createClient().auth.updateUser({ password })
+      if (error) {
+        setError(error.message)
+        return
+      }
+      setDone(true)
+      setPassword('')
+      setConfirmation('')
+    } catch {
+      setError('Could not connect to password reset. Please try again.')
+    } finally {
+      setBusy(false)
     }
-    setDone(true)
-    setPassword('')
-    setConfirmation('')
   }
 
   return (

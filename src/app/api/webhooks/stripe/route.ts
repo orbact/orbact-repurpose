@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { stripe, PLAN_PRICES } from '@/lib/stripe'
+import { getStripe, PLAN_PRICES } from '@/lib/stripe'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { paidCreditPeriodEnd, subscriptionIdOfInvoice } from '@/lib/billing/invoice'
 import Stripe from 'stripe'
@@ -15,6 +15,7 @@ function customerIdOf(value: string | Stripe.Customer | Stripe.DeletedCustomer |
 }
 
 async function syncSubscription(subscriptionId: string, expectedCustomerId?: string) {
+  const stripe = getStripe()
   // Fetch current Stripe state so delayed and repeated events cannot restore an older plan.
   const subscription = await stripe.subscriptions.retrieve(subscriptionId)
   const customerId = customerIdOf(subscription.customer)
@@ -60,6 +61,7 @@ async function syncSubscription(subscriptionId: string, expectedCustomerId?: str
 }
 
 async function applyInvoice(invoiceId: string) {
+  const stripe = getStripe()
   // A snapshot event can use an older API version and only embeds the first
   // page of lines. Read the invoice and all of its lines from Stripe instead.
   const invoice = await stripe.invoices.retrieve(invoiceId)
@@ -98,6 +100,10 @@ async function applyInvoice(invoiceId: string) {
 }
 
 export async function POST(req: NextRequest) {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return NextResponse.json({ error: 'Webhook is not configured' }, { status: 503 })
+  }
+  const stripe = getStripe()
   const body = await req.text()
   const signature = req.headers.get('stripe-signature')
   if (!signature) return NextResponse.json({ error: 'Missing signature' }, { status: 400 })

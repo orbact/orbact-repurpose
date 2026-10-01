@@ -20,13 +20,27 @@ if (!response.ok) {
   process.exit(1)
 }
 const schema = await response.json()
-for (const table of ['profiles', 'generations', 'publish_queue', 'agency_inquiries']) {
-  const properties = schema.definitions?.[table]?.properties
-  console.log(table + ': ' + (properties
-    ? Object.entries(properties).map(([name, spec]) =>
-      name + ' (' + (spec.format || spec.type || 'unknown') + ')').join(', ')
-    : 'not exposed'))
+let missing = false
+const required = {
+  profiles: ['id', 'email', 'plan', 'generations_used', 'generations_limit', 'brand_brief'],
+  generations: ['id', 'user_id', 'request_id', 'title', 'input_raw', 'outputs', 'status', 'credit_reserved', 'credit_refunded'],
+  agency_inquiries: ['id', 'name', 'email', 'service', 'challenge'],
+  publish_queue: ['id', 'user_id', 'platform', 'delivery_mode', 'status', 'scheduled_at'],
+  publishing_connections: ['id', 'user_id', 'platform', 'external_account_id', 'enabled'],
+  stripe_paid_invoices: ['invoice_id', 'customer_id', 'period_end'],
 }
-for (const name of ['try_consume_generation', 'reserve_generation', 'finish_generation', 'apply_paid_invoice']) {
-  console.log(name + ': ' + (Object.keys(schema.paths || {}).some((path) => path.includes('/rpc/' + name)) ? 'present' : 'absent'))
+for (const [table, columns] of Object.entries(required)) {
+  const properties = schema.definitions?.[table]?.properties
+  const absent = columns.filter((column) => !properties?.[column])
+  console.log(`${absent.length ? 'MISSING' : 'OK'} table ${table}${absent.length ? ': ' + absent.join(', ') : ''}`)
+  if (absent.length) missing = true
+}
+for (const name of ['reserve_generation', 'finish_generation', 'apply_paid_invoice', 'claim_due_posts']) {
+  const present = Object.keys(schema.paths || {}).some((path) => path.includes('/rpc/' + name))
+  console.log(`${present ? 'OK' : 'MISSING'} function ${name}`)
+  if (!present) missing = true
+}
+if (missing) {
+  console.error('Database schema is incomplete. Apply supabase/migrations/202609290001_core.sql to this project, then run the read-only acceptance checks.')
+  process.exitCode = 1
 }

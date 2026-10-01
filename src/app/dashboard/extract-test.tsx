@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ExtractResult } from '@/lib/extract'
 import type { GeneratedContent, GenerationBrief } from '@/lib/ai/content-schema'
@@ -16,7 +16,10 @@ const DEFAULT_BRIEF: GenerationBrief = {
   bannedClaims: '',
 }
 
-export default function ExtractTest({ initialBrief }: { initialBrief: GenerationBrief | null }) {
+export default function ExtractTest({ initialBrief, imageGenerationEnabled }: {
+  initialBrief: GenerationBrief | null
+  imageGenerationEnabled: boolean
+}) {
   const [type, setType] = useState<'url' | 'text' | 'youtube'>('url')
   const [input, setInput] = useState('')
   const [extracted, setExtracted] = useState<ExtractResult | null>(null)
@@ -32,6 +35,15 @@ export default function ExtractTest({ initialBrief }: { initialBrief: Generation
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState<'idle' | 'extracting' | 'generating'>('idle')
   const router = useRouter()
+  const sourceRevision = useRef(0)
+
+  function changeSource(value: string) {
+    sourceRevision.current += 1
+    setInput(value)
+    setExtracted(null)
+    setRequestId(null)
+    setError(null)
+  }
 
   async function saveBrandSettings() {
     setBrandNotice(null)
@@ -49,6 +61,7 @@ export default function ExtractTest({ initialBrief }: { initialBrief: Generation
   }
 
   async function handleExtract() {
+    const revision = sourceRevision.current
     setLoading('extracting')
     setError(null)
     setExtracted(null)
@@ -67,6 +80,7 @@ export default function ExtractTest({ initialBrief }: { initialBrief: Generation
         return
       }
       const data = await res.json()
+      if (revision !== sourceRevision.current) return
       if (!res.ok) {
         setError(data.error || 'Could not read this source')
         return
@@ -74,7 +88,7 @@ export default function ExtractTest({ initialBrief }: { initialBrief: Generation
       setExtracted(data)
       setDraftTitle(data.title)
     } catch {
-      setError('Network error. Check your connection and try again.')
+      if (revision === sourceRevision.current) setError('Network error. Check your connection and try again.')
     } finally {
       setLoading('idle')
     }
@@ -107,7 +121,7 @@ export default function ExtractTest({ initialBrief }: { initialBrief: Generation
       const data = await res.json()
       if (!res.ok) {
         setError(data.error || 'Generation failed')
-        if (data.error?.includes('refunded') || (res.status >= 400 && res.status < 500 && res.status !== 409)) setRequestId(null)
+        if (data.creditRefunded === true || (res.status >= 400 && res.status < 500 && res.status !== 409)) setRequestId(null)
         return
       }
       setGenerationId(data.id)
@@ -173,7 +187,7 @@ export default function ExtractTest({ initialBrief }: { initialBrief: Generation
           <div className="flex flex-wrap gap-2 mb-5" aria-label="Source type">
             {sourceTypes.map((item) => (
               <button key={item.value} type="button" aria-pressed={type === item.value}
-                onClick={() => { setType(item.value); setExtracted(null); setError(null); setRequestId(null) }}
+                onClick={() => { setType(item.value); changeSource('') }}
                 className={'px-4 py-2 rounded-full border text-sm font-medium transition-colors ' +
                   (type === item.value ? 'border-violet-400/60 bg-violet-500/20 text-white' : 'border-border text-muted hover:text-white hover:border-violet-400/40')}>
                 {item.label}
@@ -182,8 +196,9 @@ export default function ExtractTest({ initialBrief }: { initialBrief: Generation
           </div>
 
           {type === 'youtube' && <p className="text-xs text-muted mb-3">YouTube captions are best effort. If unavailable, paste the transcript instead.</p>}
+          {type === 'url' && <p className="text-xs text-muted mb-3">Public article URLs work best. YouTube links are detected automatically. If a site blocks reading, paste its text instead.</p>}
           <label htmlFor="source-input" className="block text-sm font-medium mb-2">Source content</label>
-          <textarea id="source-input" value={input} onChange={(event) => setInput(event.target.value)}
+          <textarea id="source-input" value={input} onChange={(event) => changeSource(event.target.value)}
             placeholder={placeholders[type]} rows={type === 'text' ? 8 : 3}
             maxLength={type === 'text' ? 14000 : 2048}
             className="input-field resize-y leading-relaxed" />
@@ -199,6 +214,7 @@ export default function ExtractTest({ initialBrief }: { initialBrief: Generation
               <p className="text-xs uppercase tracking-[0.2em] text-success mb-2">Source ready</p>
               <h3 className="font-semibold mb-2">{extracted.title}</h3>
               <p className="text-sm text-muted line-clamp-3">{extracted.text}</p>
+              <p className="text-xs text-muted mt-2">{extracted.sourceType === 'youtube' ? 'YouTube captions' : extracted.sourceType === 'url' ? 'Article text' : 'Pasted text'} · {extracted.text.length.toLocaleString()} characters ready</p>
 
               <details className="mt-5 rounded-xl border border-border p-4">
                 <summary className="cursor-pointer text-sm font-medium">Tune the voice and offer</summary>
@@ -235,7 +251,7 @@ export default function ExtractTest({ initialBrief }: { initialBrief: Generation
 
               <div className="flex flex-wrap items-center gap-4 mt-5">
                 <button type="button" onClick={handleGenerate} disabled={loading !== 'idle'} className="btn-primary">
-                  {loading === 'generating' ? 'Creating drafts...' : 'Generate 4 draft formats'}
+                  {loading === 'generating' ? 'Creating drafts...' : 'Generate 5 draft formats'}
                 </button>
                 <span className="text-xs text-muted">One credit per completed generation</span>
               </div>
@@ -253,7 +269,7 @@ export default function ExtractTest({ initialBrief }: { initialBrief: Generation
         }} />
       </div>
 
-      {outputs && <OutputWorkspace outputs={outputs} onChange={(next) => { setOutputs(next); setSaveNotice(null) }}
+      {outputs && <OutputWorkspace outputs={outputs} imageGenerationEnabled={imageGenerationEnabled} onChange={(next) => { setOutputs(next); setSaveNotice(null) }}
         title={draftTitle} onTitleChange={(next) => { setDraftTitle(next); setSaveNotice(null) }}
         onSave={saveEdits} saving={saving} saveNotice={saveNotice} generationId={generationId} />}
       <PublishingPlanner outputs={outputs} generationId={generationId} />
