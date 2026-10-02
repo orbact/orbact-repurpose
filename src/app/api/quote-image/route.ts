@@ -39,15 +39,11 @@ export async function POST(req: NextRequest) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
-  const { prompt, seed } = body as Record<string, unknown>
+  const { prompt } = body as Record<string, unknown>
   const cleanPrompt = typeof prompt === 'string' ? prompt.trim() : ''
   if (cleanPrompt.length < 12 || cleanPrompt.length > 300) {
     return NextResponse.json({ error: 'Describe the image in 12–300 characters.' }, { status: 400 })
   }
-  if (seed !== undefined && (!Number.isInteger(seed) || Number(seed) < 0 || Number(seed) > 999_999_999)) {
-    return NextResponse.json({ error: 'Invalid image seed.' }, { status: 400 })
-  }
-
   const { success } = await quoteImageRateLimit.limit(user.id)
   if (!success) {
     return NextResponse.json({ error: 'Image limit reached. Try again later.' }, { status: 429 })
@@ -60,7 +56,6 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         prompt: `${cleanPrompt}. Visual artwork only: no lettering, words, logos, watermarks, numbers, or interface text.`,
         steps: 4,
-        seed: seed ?? Math.floor(Math.random() * 1_000_000_000),
       }),
       cache: 'no-store',
       redirect: 'error',
