@@ -18,7 +18,7 @@ Use the supplied audience, tone, offer and CTA only where they fit the source. D
 Write for each platform rather than shortening the same paragraph. Lead with a specific idea, give a useful takeaway, and use a natural CTA only where relevant.
 Use clear language, concrete takeaways, varied sentence lengths, and a strong opening. Avoid generic AI phrases, clickbait, forced emojis, hashtags in prose, and repetitive calls to action.
 If the source lacks a detail, omit it. Never imply a platform post is already published. Include a URL only if it occurs in the source or brand brief; do not invent links.
-The image prompt must describe a visual scene or composition, with no text, logos, statistics or claims. It is a suggestion for optional image generation, not a factual source.
+The image prompt must describe a visual scene or composition, with no text, logos, statistics or claims. Favor a charcoal-dark editorial image, subtle cyan or blue light, and generous shadowed space for large overlaid lettering. It is a suggestion for optional image generation, not a factual source.
 
 Return only valid JSON with exactly these keys:
 {

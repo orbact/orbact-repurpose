@@ -141,3 +141,10 @@ body {
 .input-field::placeholder {
   color: var(--muted);
 }
+@font-face {
+  font-family: 'Orbact Display';
+  src: url('/fonts/Montserrat-Variable.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
