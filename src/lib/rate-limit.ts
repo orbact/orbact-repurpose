@@ -26,6 +26,8 @@ export const quoteImageRateLimit = new Ratelimit({
   redis,
   limiter: Ratelimit.slidingWindow(3, '1 d'),
   prefix: `${prefix}:quote-image`,
+  // Keep Redis authoritative if an image attempt needs an operator reset.
+  ephemeralCache: false,
 })
 
 // Tighter — checkout/portal spam is a different risk profile (Stripe API abuse)
