@@ -1,4 +1,4 @@
-# Prototype acceptance report — October 1, 2026
+# Prototype acceptance report — updated October 2, 2026
 
 This report covers the deployed Vercel prototype and its connected free-tier services. Automatic Make publishing, paid checkout, AI-hosted image generation, and public email signup/recovery were intentionally disabled.
 
@@ -10,6 +10,7 @@ This report covers the deployed Vercel prototype and its connected free-tier ser
 - In the live dashboard, pasted source text produced LinkedIn, X, Facebook Page, Instagram, and carousel drafts. Credits changed from 0/3 to 1/3; a saved edit appeared in the library. The sample remained on the founder's account for review.
 - A live public article URL, `https://orbact-repurpose.vercel.app/services/automation`, extracted 677 characters after fixing the pinned DNS lookup. A direct local HTTPS extraction also passed. No generation credit was used for the URL test.
 - A manual Facebook Page calendar item was created and displayed, then removed after the test. No test item remains planned.
+- The Image Studio update deployed in commit `2d736d7` and Vercel marked it Ready. The live app exported square 1080 × 1080 and portrait 1080 × 1350 PNGs, both inspected for legible typography and layout. These were browser-generated without a third-party image API.
 - A temporary contact inquiry reached `agency_inquiries` and was removed. Groq showed a Free plan and supplied a real generation response. Upstash showed Free Tier in Frankfurt with usage within its quota.
 - Local checks passed: 15 tests, lint, production build, `npm run ai:check`, and the Supabase acceptance script. Recent Vercel logs showed zero errors during the inspected interval.
 
@@ -18,7 +19,7 @@ Repeatable checks live in [`scripts/verify-supabase-acceptance.mjs`](../scripts/
 ## Limits and deferred work
 
 - The generated sample initially described a proposed consulting workflow as completed work. The saved draft was corrected, and the prompt now requires hypothetical language and correct attribution for third-party examples. AI copy still needs human review before posting.
-- Browser download controls for Markdown, JSON, JPEG, and PNG appeared, but downloaded files were not inspected in this acceptance pass. Captioned YouTube extraction, real API fault refunds, responsive layout, and a brand-new Google user's first sign-in were not independently verified.
+- Markdown, JSON, and carousel download files were not inspected in this acceptance pass. Captioned YouTube extraction, real API fault refunds, responsive layout, and a brand-new Google user's first sign-in were not independently verified. Cloudflare AI artwork is coded but remains disabled until a Free account, token, and real provider response are tested.
 - Vercel Hobby is being used only for the prototype. Commercial paid launch requires hosting or a plan that permits the intended use. Existing sandbox Stripe links require a deliberate migration and live billing acceptance; paid checkout stays disabled. Custom SMTP is required before enabling email signup and password recovery.
 - Make publishing remains deferred and disabled. Its scenario and all social-posting checks are outside this app acceptance pass. X delivery remains manual under the zero-cost policy.
 - The founder must review the Privacy Policy and Terms for the operating entity, jurisdiction, retention terms, and support details before inviting external users.
