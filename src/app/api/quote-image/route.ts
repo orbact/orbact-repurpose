@@ -7,11 +7,19 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 const MAX_IMAGE_BYTES = 3_000_000
-const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const MAX_RESPONSE_BYTES = 5_000_000
+
+function imageType(bytes: Buffer): string | null {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg'
+  if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return 'image/png'
+  if (bytes.length >= 12 && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP') return 'image/webp'
+  return null
+}
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.POLLINATIONS_API_KEY
-  if (process.env.ENABLE_QUOTE_IMAGES !== 'true' || !apiKey) {
+  const apiToken = process.env.CLOUDFLARE_AI_API_TOKEN
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID
+  if (process.env.ENABLE_QUOTE_IMAGES !== 'true' || !apiToken || !accountId || !/^[a-f0-9]{32}$/i.test(accountId)) {
     return NextResponse.json({ error: 'AI image generation is not configured.' }, { status: 503 })
   }
 
@@ -45,25 +53,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Image limit reached. Try again later.' }, { status: 429 })
   }
 
-  const url = new URL(`https://gen.pollinations.ai/image/${encodeURIComponent(cleanPrompt)}`)
-  url.searchParams.set('model', 'flux')
-  url.searchParams.set('width', '768')
-  url.searchParams.set('height', '768')
-  url.searchParams.set('seed', String(seed ?? Math.floor(Math.random() * 1_000_000_000)))
-
   try {
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${apiKey}`, Accept: 'image/jpeg,image/png,image/webp' },
+    const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/black-forest-labs/flux-1-schnell`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiToken}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        prompt: `${cleanPrompt}. Visual artwork only: no lettering, words, logos, watermarks, numbers, or interface text.`,
+        steps: 4,
+        seed: seed ?? Math.floor(Math.random() * 1_000_000_000),
+      }),
       cache: 'no-store',
       redirect: 'error',
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(45_000),
     })
     if (!response.ok) {
       console.error('Image provider returned', response.status)
+      if (response.status === 429) return NextResponse.json({ error: 'The free image quota is exhausted. Use the branded card or try again tomorrow.' }, { status: 429 })
       return NextResponse.json({ error: 'The image provider could not generate this image.' }, { status: 502 })
     }
-    const contentType = response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() || ''
-    if (!IMAGE_TYPES.has(contentType) || !response.body) {
+    if (!response.body || Number(response.headers.get('content-length') ?? 0) > MAX_RESPONSE_BYTES) {
       return NextResponse.json({ error: 'The image provider returned an invalid image.' }, { status: 502 })
     }
     const chunks: Uint8Array[] = []
@@ -73,16 +81,26 @@ export async function POST(req: NextRequest) {
       const { done, value } = await reader.read()
       if (done) break
       size += value.byteLength
-      if (size > MAX_IMAGE_BYTES) {
+      if (size > MAX_RESPONSE_BYTES) {
         await reader.cancel()
         return NextResponse.json({ error: 'The generated image is too large.' }, { status: 502 })
       }
       chunks.push(value)
     }
     if (size === 0) return NextResponse.json({ error: 'The image provider returned an empty image.' }, { status: 502 })
-    const bytes = new Uint8Array(size)
-    let offset = 0
-    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength }
+    const result = JSON.parse(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString('utf8')) as {
+      success?: boolean
+      result?: { image?: unknown }
+    }
+    const encoded = result.success ? result.result?.image : undefined
+    if (typeof encoded !== 'string' || encoded.length > MAX_RESPONSE_BYTES || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
+      return NextResponse.json({ error: 'The image provider returned an invalid image.' }, { status: 502 })
+    }
+    const bytes = Buffer.from(encoded, 'base64')
+    const contentType = imageType(bytes)
+    if (!contentType || bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) {
+      return NextResponse.json({ error: 'The image provider returned an invalid image.' }, { status: 502 })
+    }
     return new NextResponse(bytes, {
       headers: { 'Content-Type': contentType, 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' },
     })
