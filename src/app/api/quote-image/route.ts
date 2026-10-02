@@ -67,7 +67,14 @@ export async function POST(req: NextRequest) {
       signal: AbortSignal.timeout(45_000),
     })
     if (!response.ok) {
-      console.error('Image provider returned', response.status)
+      const providerError = await response.json().catch(() => null) as { errors?: Array<{ code?: unknown; message?: unknown }> } | null
+      const diagnostic = Array.isArray(providerError?.errors)
+        ? providerError.errors.slice(0, 2).map((item) => ({
+          code: typeof item.code === 'number' ? item.code : null,
+          message: typeof item.message === 'string' ? item.message.slice(0, 160) : null,
+        }))
+        : []
+      console.error('Image provider returned', response.status, diagnostic)
       if (response.status === 429) return NextResponse.json({ error: 'The free image quota is exhausted. Use the branded card or try again tomorrow.' }, { status: 429 })
       return NextResponse.json({ error: 'The image provider could not generate this image.' }, { status: 502 })
     }
