@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { generateRepurposedContent } from '@/lib/ai/generate-content'
+import { AIProviderBusyError, generateRepurposedContent } from '@/lib/ai/generate-content'
 import { MAX_INPUT_CHARS } from '@/lib/extract'
 import { readJsonBody, RequestBodyError } from '@/lib/http/read-json'
 import { generateRateLimit } from '@/lib/rate-limit'
@@ -133,13 +133,21 @@ export async function POST(req: NextRequest) {
       p_outputs: null,
       p_success: false,
     })
-    console.error('Generation failed', error)
+    console.error('Generation failed', error instanceof Error
+      ? { name: error.name, message: error.message.slice(0, 240) }
+      : { name: 'Unknown error' })
     if (refundError || refundState !== 'failed') {
       console.error('Generation refund could not be confirmed; stale reservation will be recovered', refundError)
       return NextResponse.json({
         error: 'Could not confirm this attempt. Check your history, then retry the same request.',
         creditRefunded: false,
       }, { status: 503 })
+    }
+    if (error instanceof AIProviderBusyError) {
+      return NextResponse.json({
+        error: `The free AI service is busy. Your credit was refunded. Try again in about ${error.retryAfterSeconds} seconds.`,
+        creditRefunded: true,
+      }, { status: 429, headers: { 'Retry-After': String(error.retryAfterSeconds) } })
     }
     return NextResponse.json({
       error: 'Content creation failed. Your credit was refunded; please try again.',

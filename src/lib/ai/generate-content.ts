@@ -44,6 +44,24 @@ Carousel: a short cover hook, 3-4 useful slides, each with a short headline, opt
 Image prompt: 15-45 words, visually specific, suitable for a square social image, without lettering or brand marks.
 Do not put Markdown asterisks in any field.`
 
+export class AIProviderBusyError extends Error {
+  readonly retryAfterSeconds: number
+
+  constructor(retryAfterSeconds: number) {
+    super('The free AI service is temporarily at capacity.')
+    this.name = 'AIProviderBusyError'
+    this.retryAfterSeconds = retryAfterSeconds
+  }
+}
+
+function rateLimitWait(error: unknown): number | null {
+  if (!error || typeof error !== 'object' || !('status' in error) || error.status !== 429) return null
+  const headers = 'headers' in error ? error.headers : null
+  const retryAfter = headers instanceof Headers ? headers.get('retry-after') : null
+  const seconds = retryAfter === null ? NaN : Number(retryAfter)
+  return Number.isFinite(seconds) && seconds >= 0 ? Math.max(1, Math.ceil(seconds)) : 30
+}
+
 export async function generateRepurposedContent(
   title: string,
   sourceText: string,
@@ -51,7 +69,8 @@ export async function generateRepurposedContent(
 ): Promise<GeneratedContent> {
   const apiKey = process.env.GROQ_API_KEY
   if (!apiKey) throw new Error('Content generation is not configured. Your credit was refunded.')
-  const groq = new Groq({ apiKey, timeout: 25_000, maxRetries: 0 })
+  const groq = new Groq({ apiKey, timeout: 20_000, maxRetries: 0 })
+  const deadline = Date.now() + 50_000
   const userContent = JSON.stringify({
     sourceTitle: title,
     sourceText,
@@ -65,18 +84,31 @@ export async function generateRepurposedContent(
   })
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    const completion = await groq.chat.completions.create({
-      model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        ...(attempt ? [{ role: 'system' as const, content: 'The previous response failed validation. Follow the JSON shape and character limits exactly.' }] : []),
-        { role: 'user', content: userContent },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: attempt ? 0.35 : 0.6,
-      max_tokens: 3500,
-      reasoning_effort: 'low',
-    })
+    let completion
+    for (let providerAttempt = 0; ; providerAttempt++) {
+      try {
+        completion = await groq.chat.completions.create({
+          model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            ...(attempt ? [{ role: 'system' as const, content: 'The previous response failed validation. Follow the JSON shape and character limits exactly.' }] : []),
+            { role: 'user', content: userContent },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: attempt ? 0.35 : 0.6,
+          max_tokens: 2200,
+          reasoning_effort: 'low',
+        })
+        break
+      } catch (error) {
+        const waitSeconds = rateLimitWait(error)
+        if (waitSeconds === null) throw error
+        if (providerAttempt > 0 || waitSeconds > 20 || Date.now() + waitSeconds * 1000 + 20_000 > deadline) {
+          throw new AIProviderBusyError(waitSeconds)
+        }
+        await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000))
+      }
+    }
 
     const raw = completion.choices[0]?.message?.content
     if (!raw) continue
