@@ -38,13 +38,13 @@ function drawBackdrop(ctx: CanvasRenderingContext2D, width: number, height: numb
   ctx.fillRect(0, 0, width, height)
   if (artwork) {
     ctx.save()
-    ctx.globalAlpha = layout === 'split' ? 0.52 : 0.42
+    ctx.globalAlpha = layout === 'split' ? 0.82 : 0.68
     drawCover(ctx, artwork, width, height)
     ctx.restore()
-    const shade = ctx.createLinearGradient(0, 0, width, height)
-    shade.addColorStop(0, 'rgba(23, 23, 23, 0.86)')
-    shade.addColorStop(0.5, 'rgba(23, 23, 23, 0.72)')
-    shade.addColorStop(1, 'rgba(23, 23, 23, 0.67)')
+    const shade = ctx.createLinearGradient(0, 0, width, 0)
+    shade.addColorStop(0, 'rgba(23, 23, 23, 0.90)')
+    shade.addColorStop(0.55, layout === 'split' ? 'rgba(23, 23, 23, 0.67)' : 'rgba(23, 23, 23, 0.72)')
+    shade.addColorStop(1, layout === 'split' ? 'rgba(23, 23, 23, 0.45)' : 'rgba(23, 23, 23, 0.58)')
     ctx.fillStyle = shade
     ctx.fillRect(0, 0, width, height)
   }
@@ -109,9 +109,9 @@ function drawHeadline(ctx: CanvasRenderingContext2D, options: VisualOptions, hei
   }))
   const hasBody = Boolean(options.body?.trim())
   const firstBaseline = height === 1350 ? 432 : (options.kicker?.trim() ? 400 : 345)
-  const bottomLimit = height === 1350 ? (hasBody ? 945 : 1085) : (hasBody ? 710 : 840)
+  const bottomLimit = height === 1350 ? (hasBody ? 945 : 1085) : (hasBody ? 650 : 840)
   const maxWidth = 860
-  let size = height === 1350 ? 132 : 112
+  let size = height === 1350 ? 132 : (hasBody ? 160 : 138)
   let lines: Word[][] = []
   for (; size >= 50; size -= 4) {
     lines = wrapHeadline(ctx, words, size, maxWidth)
@@ -145,8 +145,8 @@ function drawHeadline(ctx: CanvasRenderingContext2D, options: VisualOptions, hei
 
 function drawBody(ctx: CanvasRenderingContext2D, body: string, startY: number, height: number): boolean {
   if (!body.trim()) return true
-  const maxBottom = height - 205
-  for (let size = 36; size >= 25; size -= 2) {
+  const maxBottom = height - 190
+  for (let size = 44; size >= 28; size -= 2) {
     ctx.font = `500 ${size}px ${FONT}`
     const words = body.trim().split(/\s+/)
     const lines: string[] = []
