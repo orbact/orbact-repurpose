@@ -119,7 +119,8 @@ function drawHeadline(ctx: CanvasRenderingContext2D, options: VisualOptions, hei
       ctx.font = wordFont(word, size)
       return ctx.measureText(word.text).width > maxWidth
     })
-    if (!tooWide && lines.length <= (height === 1350 ? 5 : 4) &&
+    const maxLines = height === 1350 ? 6 : (hasBody ? 5 : 7)
+    if (!tooWide && lines.length <= maxLines &&
         firstBaseline + (lines.length - 1) * size * 1.08 <= bottomLimit) break
   }
   const fits = size >= 50

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { GeneratedContent } from '@/lib/ai/content-schema'
 import { drawOrbactVisual, loadVisualFont } from '@/lib/visual-template'
 import ImageStudio from './image-studio'
@@ -14,10 +14,8 @@ function download(name: string, content: string, type: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
 }
 
-async function downloadCarouselSlide(headline: string, body: string, index: number, kicker = '', last = false): Promise<boolean> {
-  await loadVisualFont()
-  const canvas = document.createElement('canvas')
-  const fits = drawOrbactVisual(canvas, {
+function carouselVisual(headline: string, body: string, index: number, kicker = '', last = false) {
+  return {
     headline,
     body,
     kicker,
@@ -26,7 +24,39 @@ async function downloadCarouselSlide(headline: string, body: string, index: numb
     emphasisWords: index === 1 ? 1 : 0,
     footer: last ? 'closing' : 'carousel',
     slideNumber: index,
-  })
+  } as const
+}
+
+function CarouselPreview({ headline, body = '', index, kicker = '', last = false }: {
+  headline: string
+  body?: string
+  index: number
+  kicker?: string
+  last?: boolean
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [fits, setFits] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    void loadVisualFont().then(() => {
+      if (active && canvasRef.current) {
+        setFits(drawOrbactVisual(canvasRef.current, carouselVisual(headline, body, index, kicker, last)))
+      }
+    }).catch(() => { if (active) setFits(false) })
+    return () => { active = false }
+  }, [headline, body, index, kicker, last])
+
+  return <>
+    <canvas ref={canvasRef} role="img" aria-label={`Preview of carousel slide ${index}`} className="w-full aspect-square rounded-xl border border-white/10 mt-4" />
+    {!fits && <p className="text-xs text-danger mt-2">Text exceeds the safe area. Shorten it before exporting.</p>}
+  </>
+}
+
+async function downloadCarouselSlide(headline: string, body: string, index: number, kicker = '', last = false): Promise<boolean> {
+  await loadVisualFont()
+  const canvas = document.createElement('canvas')
+  const fits = drawOrbactVisual(canvas, carouselVisual(headline, body, index, kicker, last))
   if (!fits) return false
   return await new Promise<boolean>((resolve) => canvas.toBlob((blob) => {
     if (!blob) { resolve(false); return }
@@ -182,6 +212,7 @@ export default function OutputWorkspace({
         <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
           <div style={{ fontFamily: 'Orbact Display, Montserrat, sans-serif' }} className="rounded-2xl border border-cyan-400/30 bg-[#171717] p-5 flex flex-col min-h-60">
             <span className="text-xs uppercase tracking-widest text-[#00ecea]">Cover · 01</span>
+            <CarouselPreview headline={outputs.carousel.cover.headline} kicker={outputs.carousel.cover.accent} index={1} />
             <input aria-label="Cover headline" className="bg-transparent border-b border-white/15 text-lg font-bold mt-6 outline-none focus:border-cyan-400" value={outputs.carousel.cover.headline} onChange={(event) => onChange({ ...outputs, carousel: { ...outputs.carousel, cover: { ...outputs.carousel.cover, headline: event.target.value } } })} />
             <input aria-label="Cover accent" className="bg-transparent border-b border-white/15 text-sm text-[#00ecea] mt-2 outline-none focus:border-cyan-400" value={outputs.carousel.cover.accent} onChange={(event) => onChange({ ...outputs, carousel: { ...outputs.carousel, cover: { ...outputs.carousel.cover, accent: event.target.value } } })} />
             <button type="button" onClick={() => void saveCarouselSlide(outputs.carousel.cover.headline, '', 1, outputs.carousel.cover.accent)} className="text-xs text-[#00ecea] hover:underline mt-auto pt-6 self-start">Download PNG</button>
@@ -189,6 +220,7 @@ export default function OutputWorkspace({
           {outputs.carousel.slides.map((slide, index) => (
             <div key={index} style={{ fontFamily: 'Orbact Display, Montserrat, sans-serif' }} className="rounded-2xl border border-white/15 bg-[#171717] p-5 flex flex-col min-h-60">
               <span className="text-xs uppercase tracking-widest text-[#00ecea]">Slide · {String(index + 2).padStart(2, '0')}</span>
+              <CarouselPreview headline={slide.headline} body={slide.body} kicker={slide.accent} index={index + 2} />
               <input aria-label={'Slide ' + (index + 2) + ' headline'} className="bg-transparent border-b border-white/15 text-lg font-bold mt-4 outline-none focus:border-cyan-400" value={slide.headline} onChange={(event) => {
                 const slides = [...outputs.carousel.slides]
                 slides[index] = { ...slide, headline: event.target.value }
@@ -210,6 +242,7 @@ export default function OutputWorkspace({
           {outputs.carousel.closing !== undefined && (
             <div style={{ fontFamily: 'Orbact Display, Montserrat, sans-serif' }} className="rounded-2xl border border-white/15 bg-[#171717] p-5 flex flex-col min-h-60">
               <span className="text-xs uppercase tracking-widest text-[#00ecea]">Closing · {String(outputs.carousel.slides.length + 2).padStart(2, '0')}</span>
+              <CarouselPreview headline={outputs.carousel.closing} index={outputs.carousel.slides.length + 2} last />
               <textarea aria-label="Closing slide" className="bg-transparent text-lg font-bold mt-6 resize-y outline-none min-h-28" value={outputs.carousel.closing} onChange={(event) => onChange({ ...outputs, carousel: { ...outputs.carousel, closing: event.target.value } })} />
               <button type="button" onClick={() => void saveCarouselSlide(outputs.carousel.closing || '', '', outputs.carousel.slides.length + 2, '', true)} className="text-xs text-[#00ecea] hover:underline mt-auto pt-3 self-start">Download PNG</button>
             </div>
