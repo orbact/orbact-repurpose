@@ -108,7 +108,7 @@ function drawHeadline(ctx: CanvasRenderingContext2D, options: VisualOptions, hei
     accent: index >= all.length - (options.emphasisWords ?? 2),
   }))
   const hasBody = Boolean(options.body?.trim())
-  const firstBaseline = height === 1350 ? 432 : (options.kicker?.trim() ? 400 : 345)
+  const firstBaseline = height === 1350 ? (options.kicker?.trim() ? 500 : 432) : (options.kicker?.trim() ? 485 : 345)
   const bottomLimit = height === 1350 ? (hasBody ? 945 : 1085) : (hasBody ? 650 : 840)
   const maxWidth = 860
   let size = height === 1350 ? 132 : (hasBody ? 160 : 138)
@@ -254,8 +254,8 @@ export function drawOrbactVisual(canvas: HTMLCanvasElement, options: VisualOptio
   drawBrand(ctx, width)
   if (options.kicker?.trim()) {
     ctx.fillStyle = CYAN
-    ctx.font = `650 24px ${FONT}`
-    ctx.fillText(options.kicker.trim().toUpperCase().slice(0, 60), 110, height === 1350 ? 320 : 310)
+    ctx.font = `650 30px ${FONT}`
+    ctx.fillText(options.kicker.trim().toUpperCase().slice(0, 60), 110, height === 1350 ? 340 : 310)
   }
   const title = drawHeadline(ctx, options, height)
   const bodyFits = drawBody(ctx, options.body ?? '', title.bottom + 68, height)
