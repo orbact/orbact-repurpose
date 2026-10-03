@@ -1,11 +1,13 @@
 export type VisualFormat = 'square' | 'portrait'
 export type VisualLayout = 'editorial' | 'split'
+export type VisualTheme = 'dark' | 'light'
 
 type Word = { text: string; accent: boolean }
 type VisualOptions = {
   headline: string
   format: VisualFormat
   layout?: VisualLayout
+  theme?: VisualTheme
   emphasisWords?: number
   artwork?: HTMLImageElement | null
   kicker?: string
@@ -17,14 +19,36 @@ type VisualOptions = {
 const BLACK = '#171717'
 const WHITE = '#ffffff'
 const CYAN = '#00ecea'
+const LIGHT = '#f5f7f5'
+const INK = '#111a20'
+const DEEP_CYAN = '#006c79'
 const FONT = '"Orbact Display", Montserrat, Arial, sans-serif'
 const CONTENT_LEFT = 110
 const CONTENT_WIDTH = 860
+const SOCIAL_ICON_FILES = ['instagram', 'x', 'facebook', 'linkedin'] as const
+let socialIcons: HTMLImageElement[] = []
+let iconLoad: Promise<void> | null = null
 
-export async function loadVisualFont() {
+function loadSocialIcons() {
+  if (!iconLoad) {
+    iconLoad = Promise.all(SOCIAL_ICON_FILES.map((name) => new Promise<HTMLImageElement>((resolve, reject) => {
+      const icon = new Image()
+      icon.onload = () => resolve(icon)
+      icon.onerror = () => reject(new Error(`Could not load the ${name} brand icon.`))
+      icon.src = `/brand-icons/${name}.svg`
+    }))).then((icons) => { socialIcons = icons }).catch((error) => {
+      iconLoad = null
+      throw error
+    })
+  }
+  return iconLoad
+}
+
+export async function loadVisualAssets() {
   await Promise.all([
     document.fonts.load(`400 64px ${FONT}`),
     document.fonts.load(`750 64px ${FONT}`),
+    loadSocialIcons(),
   ])
 }
 
@@ -35,24 +59,30 @@ function drawCover(ctx: CanvasRenderingContext2D, image: HTMLImageElement, width
   ctx.drawImage(image, (width - drawnWidth) / 2, (height - drawnHeight) / 2, drawnWidth, drawnHeight)
 }
 
-function drawBackdrop(ctx: CanvasRenderingContext2D, width: number, height: number, layout: VisualLayout, artwork?: HTMLImageElement | null) {
-  ctx.fillStyle = BLACK
+function drawBackdrop(ctx: CanvasRenderingContext2D, width: number, height: number, layout: VisualLayout, theme: VisualTheme, artwork?: HTMLImageElement | null) {
+  ctx.fillStyle = theme === 'dark' ? BLACK : LIGHT
   ctx.fillRect(0, 0, width, height)
   if (artwork) {
     ctx.save()
-    ctx.globalAlpha = layout === 'split' ? 0.82 : 0.68
+    ctx.globalAlpha = layout === 'split' ? 0.82 : 0.72
     drawCover(ctx, artwork, width, height)
     ctx.restore()
     const shade = ctx.createLinearGradient(0, 0, width, 0)
-    shade.addColorStop(0, 'rgba(23, 23, 23, 0.90)')
-    shade.addColorStop(0.55, layout === 'split' ? 'rgba(23, 23, 23, 0.67)' : 'rgba(23, 23, 23, 0.72)')
-    shade.addColorStop(1, layout === 'split' ? 'rgba(23, 23, 23, 0.45)' : 'rgba(23, 23, 23, 0.58)')
+    if (theme === 'dark') {
+      shade.addColorStop(0, 'rgba(23, 23, 23, 0.94)')
+      shade.addColorStop(0.55, 'rgba(23, 23, 23, 0.82)')
+      shade.addColorStop(1, layout === 'split' ? 'rgba(23, 23, 23, 0.50)' : 'rgba(23, 23, 23, 0.62)')
+    } else {
+      shade.addColorStop(0, 'rgba(245, 247, 245, 0.96)')
+      shade.addColorStop(0.55, 'rgba(245, 247, 245, 0.84)')
+      shade.addColorStop(1, layout === 'split' ? 'rgba(245, 247, 245, 0.50)' : 'rgba(245, 247, 245, 0.65)')
+    }
     ctx.fillStyle = shade
     ctx.fillRect(0, 0, width, height)
   }
   if (layout === 'split') {
     ctx.save()
-    ctx.globalAlpha = artwork ? 0.54 : 0.9
+    ctx.globalAlpha = artwork ? 0.52 : (theme === 'dark' ? 0.9 : 0.56)
     const ring = ctx.createLinearGradient(width * 0.5, height, width, height * 0.45)
     ring.addColorStop(0, '#004778')
     ring.addColorStop(0.55, '#2fb0de')
@@ -66,16 +96,16 @@ function drawBackdrop(ctx: CanvasRenderingContext2D, width: number, height: numb
   }
 }
 
-function drawBrand(ctx: CanvasRenderingContext2D, width: number) {
+function drawBrand(ctx: CanvasRenderingContext2D, width: number, theme: VisualTheme) {
   // This transparent header owns the top 255px of every export.
-  ctx.strokeStyle = WHITE
+  ctx.strokeStyle = theme === 'dark' ? WHITE : INK
   ctx.lineWidth = 23
   ctx.lineCap = 'butt'
   ctx.beginPath()
   ctx.arc(171, 157, 52, 230 * Math.PI / 180, 550 * Math.PI / 180)
   ctx.stroke()
   ctx.textAlign = 'right'
-  ctx.fillStyle = WHITE
+  ctx.fillStyle = theme === 'dark' ? WHITE : INK
   ctx.font = `750 48px ${FONT}`
   ctx.fillText('ORBACT', width - CONTENT_LEFT, 172)
   ctx.textAlign = 'left'
@@ -182,13 +212,13 @@ function placeText(ctx: CanvasRenderingContext2D, options: VisualOptions, height
   return null
 }
 
-function drawText(ctx: CanvasRenderingContext2D, placement: TextPlacement) {
+function drawText(ctx: CanvasRenderingContext2D, placement: TextPlacement, theme: VisualTheme) {
   placement.titleLines.forEach((line, lineIndex) => {
     let x = CONTENT_LEFT
     const y = placement.titleBaseline + lineIndex * placement.titleLineHeight
     line.forEach((word, wordIndex) => {
       ctx.font = wordFont(word, placement.titleSize)
-      ctx.fillStyle = word.accent ? CYAN : WHITE
+      ctx.fillStyle = word.accent ? (theme === 'dark' ? CYAN : DEEP_CYAN) : (theme === 'dark' ? WHITE : INK)
       if (wordIndex) x += ctx.measureText(' ').width
       ctx.fillText(word.text, x, y)
       x += ctx.measureText(word.text).width
@@ -196,14 +226,14 @@ function drawText(ctx: CanvasRenderingContext2D, placement: TextPlacement) {
   })
   if (placement.bodyLines.length) {
     ctx.font = `500 ${placement.bodySize}px ${FONT}`
-    ctx.fillStyle = '#e8e8e8'
+    ctx.fillStyle = theme === 'dark' ? '#e8e8e8' : '#26353d'
     placement.bodyLines.forEach((line, index) => {
       ctx.fillText(line, CONTENT_LEFT, placement.bodyBaseline + index * placement.bodyLineHeight)
     })
   }
 }
 
-function drawKicker(ctx: CanvasRenderingContext2D, kicker: string) {
+function drawKicker(ctx: CanvasRenderingContext2D, kicker: string, theme: VisualTheme) {
   let label = kicker.trim().toUpperCase()
   let size = 28
   ctx.font = `650 ${size}px ${FONT}`
@@ -212,67 +242,54 @@ function drawKicker(ctx: CanvasRenderingContext2D, kicker: string) {
     ctx.font = `650 ${size}px ${FONT}`
   }
   while (ctx.measureText(label).width > CONTENT_WIDTH && label.length > 1) label = label.slice(0, -2) + '…'
-  ctx.fillStyle = CYAN
+  ctx.fillStyle = theme === 'dark' ? CYAN : DEEP_CYAN
   ctx.fillText(label, CONTENT_LEFT, 315)
 }
 
-function drawSocialIcons(ctx: CanvasRenderingContext2D, y: number) {
-  const x = 113
-  ctx.strokeStyle = WHITE
-  ctx.fillStyle = WHITE
-  ctx.lineWidth = 3
-  ctx.beginPath()
-  ctx.roundRect(x, y - 23, 29, 29, 7)
-  ctx.stroke()
-  ctx.beginPath()
-  ctx.arc(x + 14.5, y - 8.5, 7, 0, Math.PI * 2)
-  ctx.stroke()
-  ctx.beginPath()
-  ctx.arc(x + 23, y - 16, 2, 0, Math.PI * 2)
-  ctx.fill()
-
-  ctx.lineWidth = 2.5
-  ctx.beginPath()
-  ctx.moveTo(x + 52, y - 23); ctx.lineTo(x + 77, y + 6)
-  ctx.moveTo(x + 75, y - 23); ctx.lineTo(x + 50, y + 6)
-  ctx.stroke()
-
-  ctx.beginPath()
-  ctx.arc(x + 111, y - 8, 15, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.fillStyle = BLACK
-  ctx.font = `750 26px ${FONT}`
-  ctx.fillText('f', x + 105, y + 3)
-
-  ctx.fillStyle = WHITE
-  ctx.fillRect(x + 146, y - 23, 30, 30)
-  ctx.fillStyle = BLACK
-  ctx.font = `750 18px ${FONT}`
-  ctx.fillText('in', x + 149, y)
+function drawSocialIcons(ctx: CanvasRenderingContext2D, height: number, theme: VisualTheme) {
+  ctx.save()
+  ctx.filter = theme === 'dark' ? 'brightness(0) invert(1)' : 'brightness(0)'
+  socialIcons.forEach((icon, index) => {
+    ctx.drawImage(icon, CONTENT_LEFT + index * 54, height - 80, 31, 31)
+  })
+  ctx.restore()
 }
 
-function drawFooter(ctx: CanvasRenderingContext2D, width: number, height: number, kind: VisualOptions['footer'], slideNumber?: number) {
-  let x = 110
-  const baseline = height - 112
+function drawFooter(ctx: CanvasRenderingContext2D, width: number, height: number, kind: VisualOptions['footer'], theme: VisualTheme, slideNumber?: number) {
+  const ink = theme === 'dark' ? WHITE : INK
+  if (kind === 'carousel' && slideNumber !== 1) {
+    const dotY = height - 102
+    for (let index = 0; index < 3; index++) {
+      ctx.beginPath()
+      ctx.arc(width / 2 + (index - 1) * 38, dotY, index === 1 ? 9 : 7, 0, Math.PI * 2)
+      ctx.fillStyle = index === 1 ? (theme === 'dark' ? CYAN : DEEP_CYAN) : (theme === 'dark' ? '#828d90' : '#a3b0b1')
+      ctx.fill()
+    }
+    return
+  }
+
+  let x = CONTENT_LEFT
+  const baseline = height - 110
   for (const [part, weight] of [['www.', 400], ['orbact', 750], ['.com', 400]] as const) {
     ctx.font = `${weight} 28px ${FONT}`
-    ctx.fillStyle = WHITE
+    ctx.fillStyle = ink
     ctx.fillText(part, x, baseline)
     x += ctx.measureText(part).width
   }
-  drawSocialIcons(ctx, height - 59)
+  drawSocialIcons(ctx, height, theme)
+  ctx.fillStyle = ink
   if (kind === 'carousel') {
     ctx.textAlign = 'right'
-    ctx.font = `italic 750 30px ${FONT}`
-    ctx.fillText('SWIPE  →', width - 110, height - 60)
+    ctx.font = `750 27px ${FONT}`
+    ctx.fillText('SWIPE  →', width - CONTENT_LEFT, height - 59)
   } else if (kind === 'closing') {
     ctx.textAlign = 'right'
     ctx.font = `750 28px ${FONT}`
-    ctx.fillText('SAVE THIS', width - 110, height - 60)
+    ctx.fillText('SAVE THIS', width - CONTENT_LEFT, height - 59)
   } else {
     const left = width - 158
     const top = height - 139
-    ctx.fillStyle = CYAN
+    ctx.fillStyle = theme === 'dark' ? CYAN : DEEP_CYAN
     ctx.beginPath()
     ctx.moveTo(left, top)
     ctx.lineTo(left + 44, top)
@@ -285,8 +302,8 @@ function drawFooter(ctx: CanvasRenderingContext2D, width: number, height: number
   if (slideNumber && kind !== 'post') {
     ctx.textAlign = 'right'
     ctx.font = `500 20px ${FONT}`
-    ctx.fillStyle = '#a8a8a8'
-    ctx.fillText(String(slideNumber).padStart(2, '0'), width - 110, height - 112)
+    ctx.fillStyle = theme === 'dark' ? '#a8a8a8' : '#647277'
+    ctx.fillText(String(slideNumber).padStart(2, '0'), width - CONTENT_LEFT, height - 112)
   }
   ctx.textAlign = 'left'
 }
@@ -298,11 +315,12 @@ export function drawOrbactVisual(canvas: HTMLCanvasElement, options: VisualOptio
   const height = options.format === 'portrait' ? 1350 : 1080
   canvas.width = width
   canvas.height = height
-  drawBackdrop(ctx, width, height, options.layout ?? 'editorial', options.artwork)
-  drawBrand(ctx, width)
-  if (options.kicker?.trim()) drawKicker(ctx, options.kicker)
+  const theme = options.theme ?? 'dark'
+  drawBackdrop(ctx, width, height, options.layout ?? 'editorial', theme, options.artwork)
+  drawBrand(ctx, width, theme)
+  if (options.kicker?.trim()) drawKicker(ctx, options.kicker, theme)
   const placement = placeText(ctx, options, height)
-  if (placement) drawText(ctx, placement)
-  drawFooter(ctx, width, height, options.footer ?? 'post', options.slideNumber)
+  if (placement) drawText(ctx, placement, theme)
+  drawFooter(ctx, width, height, options.footer ?? 'post', theme, options.slideNumber)
   return Boolean(placement)
 }

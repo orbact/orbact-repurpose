@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import { useEffect, useRef, useState } from 'react'
 import type { GeneratedContent } from '@/lib/ai/content-schema'
-import { drawOrbactVisual, loadVisualFont, type VisualFormat, type VisualLayout } from '@/lib/visual-template'
+import { drawOrbactVisual, loadVisualAssets, type VisualFormat, type VisualLayout, type VisualTheme } from '@/lib/visual-template'
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
@@ -24,6 +24,7 @@ export default function ImageStudio({ outputs, aiEnabled }: {
   const [prompt, setPrompt] = useState(outputs.image_prompt || `Abstract editorial illustration about ${outputs.carousel.cover.headline}. Charcoal backdrop, cyan and deep blue light, clean negative space, no text or logos.`)
   const [format, setFormat] = useState<VisualFormat>('portrait')
   const [layout, setLayout] = useState<VisualLayout>('editorial')
+  const [theme, setTheme] = useState<VisualTheme>('dark')
   const [emphasisWords, setEmphasisWords] = useState(2)
   const [generatedUrl, setGeneratedUrl] = useState<string | null>(null)
   const [generatedType, setGeneratedType] = useState('image/jpeg')
@@ -38,25 +39,25 @@ export default function ImageStudio({ outputs, aiEnabled }: {
     let cancelled = false
     setRenderReady(false)
     async function render() {
-      await loadVisualFont()
+      await loadVisualAssets()
       if (cancelled || !canvas) return
       if (!generatedUrl) {
-        setHeadlineFits(drawOrbactVisual(canvas, { headline, format, layout, emphasisWords }))
+        setHeadlineFits(drawOrbactVisual(canvas, { headline, format, layout, theme, emphasisWords }))
         setRenderReady(true)
         return
       }
       const artwork = new window.Image()
       artwork.onload = () => {
         if (cancelled) return
-        setHeadlineFits(drawOrbactVisual(canvas, { headline, format, layout, emphasisWords, artwork }))
+        setHeadlineFits(drawOrbactVisual(canvas, { headline, format, layout, theme, emphasisWords, artwork }))
         setRenderReady(true)
       }
       artwork.onerror = () => { if (!cancelled) setError('The artwork could not be loaded. Generate another image or remove it.') }
       artwork.src = generatedUrl
     }
-    void render()
+    void render().catch(() => { if (!cancelled) setError('The visual font or brand icons could not load. Refresh the page and try again.') })
     return () => { cancelled = true }
-  }, [headline, format, layout, emphasisWords, generatedUrl])
+  }, [headline, format, layout, theme, emphasisWords, generatedUrl])
   useEffect(() => () => { if (objectUrl.current) URL.revokeObjectURL(objectUrl.current) }, [])
 
   function downloadCard() {
@@ -108,7 +109,7 @@ export default function ImageStudio({ outputs, aiEnabled }: {
       <div className="mb-6">
         <p className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Create a visual</p>
         <h3 id="image-studio-title" className="text-xl font-semibold">Image studio</h3>
-        <p className="text-sm text-muted mt-1">Oversized Orbact typography, cyan emphasis, and an optional AI image behind the design. The lettering stays sharp and editable.</p>
+        <p className="text-sm text-muted mt-1">Orbact typography, light or dark contrast, and optional AI artwork behind the design. Preview the result before exporting.</p>
       </div>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="space-y-4">
@@ -135,7 +136,14 @@ export default function ImageStudio({ outputs, aiEnabled }: {
             </div>
           </div>
           <div>
-            <label htmlFor="card-emphasis" className="block text-sm text-muted mb-2">Cyan emphasis</label>
+            <label htmlFor="card-theme" className="block text-sm text-muted mb-2">Visual theme</label>
+            <select id="card-theme" value={theme} onChange={(event) => setTheme(event.target.value as VisualTheme)} className="input-field">
+              <option value="dark">Dark · light text</option>
+              <option value="light">Light · dark text</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="card-emphasis" className="block text-sm text-muted mb-2">Accent emphasis</label>
             <select id="card-emphasis" value={emphasisWords} onChange={(event) => setEmphasisWords(Number(event.target.value))} className="input-field">
               <option value={1}>Last word</option>
               <option value={2}>Last 2 words</option>
