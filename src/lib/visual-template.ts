@@ -18,6 +18,8 @@ const BLACK = '#171717'
 const WHITE = '#ffffff'
 const CYAN = '#00ecea'
 const FONT = '"Orbact Display", Montserrat, Arial, sans-serif'
+const CONTENT_LEFT = 110
+const CONTENT_WIDTH = 860
 
 export async function loadVisualFont() {
   await Promise.all([
@@ -65,16 +67,17 @@ function drawBackdrop(ctx: CanvasRenderingContext2D, width: number, height: numb
 }
 
 function drawBrand(ctx: CanvasRenderingContext2D, width: number) {
+  // This transparent header owns the top 255px of every export.
   ctx.strokeStyle = WHITE
-  ctx.lineWidth = 33
+  ctx.lineWidth = 23
   ctx.lineCap = 'butt'
   ctx.beginPath()
-  ctx.arc(193, 183, 70, 230 * Math.PI / 180, 550 * Math.PI / 180)
+  ctx.arc(171, 157, 52, 230 * Math.PI / 180, 550 * Math.PI / 180)
   ctx.stroke()
   ctx.textAlign = 'right'
   ctx.fillStyle = WHITE
-  ctx.font = `750 52px ${FONT}`
-  ctx.fillText('ORBACT', width - 110, 164)
+  ctx.font = `750 48px ${FONT}`
+  ctx.fillText('ORBACT', width - CONTENT_LEFT, 172)
   ctx.textAlign = 'left'
 }
 
@@ -102,70 +105,115 @@ function wrapHeadline(ctx: CanvasRenderingContext2D, words: Word[], size: number
   return lines
 }
 
-function drawHeadline(ctx: CanvasRenderingContext2D, options: VisualOptions, height: number): { fits: boolean; bottom: number } {
+function fontBounds(ctx: CanvasRenderingContext2D, size: number, weight: number) {
+  ctx.font = `${weight} ${size}px ${FONT}`
+  const metrics = ctx.measureText('Ágj')
+  return {
+    ascent: Math.max(metrics.actualBoundingBoxAscent || 0, size * 0.94),
+    descent: Math.max(metrics.actualBoundingBoxDescent || 0, size * 0.28),
+  }
+}
+
+function wrapBody(ctx: CanvasRenderingContext2D, body: string, size: number): string[] | null {
+  ctx.font = `500 ${size}px ${FONT}`
+  const lines: string[] = []
+  let current = ''
+  for (const word of body.trim().split(/\s+/)) {
+    if (ctx.measureText(word).width > CONTENT_WIDTH) return null
+    const candidate = current ? `${current} ${word}` : word
+    if (current && ctx.measureText(candidate).width > CONTENT_WIDTH) {
+      lines.push(current)
+      current = word
+    } else current = candidate
+  }
+  if (current) lines.push(current)
+  return lines
+}
+
+type TextPlacement = {
+  titleLines: Word[][]
+  titleSize: number
+  titleBaseline: number
+  titleLineHeight: number
+  bodyLines: string[]
+  bodySize: number
+  bodyBaseline: number
+  bodyLineHeight: number
+}
+
+function placeText(ctx: CanvasRenderingContext2D, options: VisualOptions, height: number): TextPlacement | null {
   const words = (options.headline.trim() || 'Your next big idea').split(/\s+/).map((text, index, all) => ({
     text,
     accent: index >= all.length - (options.emphasisWords ?? 2),
   }))
-  const hasBody = Boolean(options.body?.trim())
-  const firstBaseline = height === 1350 ? (options.kicker?.trim() ? 500 : 432) : (options.kicker?.trim() ? 485 : 345)
-  const bottomLimit = height === 1350 ? (hasBody ? 945 : 1085) : (hasBody ? 650 : 840)
-  const maxWidth = 860
-  let size = height === 1350 ? 132 : (hasBody ? 160 : 138)
-  let lines: Word[][] = []
-  for (; size >= 50; size -= 4) {
-    lines = wrapHeadline(ctx, words, size, maxWidth)
-    const tooWide = words.some((word) => {
-      ctx.font = wordFont(word, size)
-      return ctx.measureText(word.text).width > maxWidth
-    })
-    const maxLines = height === 1350 ? 6 : (hasBody ? 5 : 7)
-    if (!tooWide && lines.length <= maxLines &&
-        firstBaseline + (lines.length - 1) * size * 1.08 <= bottomLimit) break
+  const body = options.body?.trim() || ''
+  const contentTop = options.kicker?.trim() ? 355 : 310
+  const contentBottom = height - 205
+  const maxTitleSize = height === 1350 ? 140 : (body ? 156 : 146)
+
+  for (let titleSize = maxTitleSize; titleSize >= 48; titleSize -= 2) {
+    const titleLines = wrapHeadline(ctx, words, titleSize, CONTENT_WIDTH)
+    if (words.some((word) => {
+      ctx.font = wordFont(word, titleSize)
+      return ctx.measureText(word.text).width > CONTENT_WIDTH
+    })) continue
+
+    const titleBounds = fontBounds(ctx, titleSize, 750)
+    const titleLineHeight = Math.max(titleSize * 1.2, titleBounds.ascent + titleBounds.descent + titleSize * 0.12)
+    const titleBaseline = contentTop + titleBounds.ascent
+    const titleBottom = titleBaseline + (titleLines.length - 1) * titleLineHeight + titleBounds.descent
+    if (titleBottom > contentBottom) continue
+
+    if (!body) return { titleLines, titleSize, titleBaseline, titleLineHeight, bodyLines: [], bodySize: 0, bodyBaseline: 0, bodyLineHeight: 0 }
+
+    const bodyTop = titleBottom + 36
+    for (let bodySize = 42; bodySize >= 28; bodySize -= 2) {
+      const bodyLines = wrapBody(ctx, body, bodySize)
+      if (!bodyLines) continue
+      const bodyBounds = fontBounds(ctx, bodySize, 500)
+      const bodyLineHeight = Math.max(bodySize * 1.36, bodyBounds.ascent + bodyBounds.descent + bodySize * 0.12)
+      const bodyBaseline = bodyTop + bodyBounds.ascent
+      const bodyBottom = bodyBaseline + (bodyLines.length - 1) * bodyLineHeight + bodyBounds.descent
+      if (bodyBottom <= contentBottom) {
+        return { titleLines, titleSize, titleBaseline, titleLineHeight, bodyLines, bodySize, bodyBaseline, bodyLineHeight }
+      }
+    }
   }
-  const fits = size >= 50
-  if (!fits) {
-    size = 50
-    lines = wrapHeadline(ctx, words, size, maxWidth)
-  }
-  const lineHeight = size * 1.08
-  lines.forEach((line, lineIndex) => {
-    let x = 110
-    const y = firstBaseline + lineIndex * lineHeight
+  return null
+}
+
+function drawText(ctx: CanvasRenderingContext2D, placement: TextPlacement) {
+  placement.titleLines.forEach((line, lineIndex) => {
+    let x = CONTENT_LEFT
+    const y = placement.titleBaseline + lineIndex * placement.titleLineHeight
     line.forEach((word, wordIndex) => {
-      ctx.font = wordFont(word, size)
+      ctx.font = wordFont(word, placement.titleSize)
       ctx.fillStyle = word.accent ? CYAN : WHITE
       if (wordIndex) x += ctx.measureText(' ').width
       ctx.fillText(word.text, x, y)
       x += ctx.measureText(word.text).width
     })
   })
-  return { fits, bottom: firstBaseline + (lines.length - 1) * lineHeight }
+  if (placement.bodyLines.length) {
+    ctx.font = `500 ${placement.bodySize}px ${FONT}`
+    ctx.fillStyle = '#e8e8e8'
+    placement.bodyLines.forEach((line, index) => {
+      ctx.fillText(line, CONTENT_LEFT, placement.bodyBaseline + index * placement.bodyLineHeight)
+    })
+  }
 }
 
-function drawBody(ctx: CanvasRenderingContext2D, body: string, startY: number, height: number): boolean {
-  if (!body.trim()) return true
-  const maxBottom = height - 190
-  for (let size = 44; size >= 28; size -= 2) {
-    ctx.font = `500 ${size}px ${FONT}`
-    const words = body.trim().split(/\s+/)
-    const lines: string[] = []
-    let current = ''
-    for (const word of words) {
-      const candidate = current ? `${current} ${word}` : word
-      if (current && ctx.measureText(candidate).width > 850) {
-        lines.push(current)
-        current = word
-      } else current = candidate
-    }
-    if (current) lines.push(current)
-    if (lines.length > 5 || startY + (lines.length - 1) * size * 1.35 > maxBottom ||
-        lines.some((line) => ctx.measureText(line).width > 850)) continue
-    ctx.fillStyle = '#e8e8e8'
-    lines.forEach((line, index) => ctx.fillText(line, 110, startY + index * size * 1.35))
-    return true
+function drawKicker(ctx: CanvasRenderingContext2D, kicker: string) {
+  let label = kicker.trim().toUpperCase()
+  let size = 28
+  ctx.font = `650 ${size}px ${FONT}`
+  while (ctx.measureText(label).width > CONTENT_WIDTH && size > 18) {
+    size -= 2
+    ctx.font = `650 ${size}px ${FONT}`
   }
-  return false
+  while (ctx.measureText(label).width > CONTENT_WIDTH && label.length > 1) label = label.slice(0, -2) + '…'
+  ctx.fillStyle = CYAN
+  ctx.fillText(label, CONTENT_LEFT, 315)
 }
 
 function drawSocialIcons(ctx: CanvasRenderingContext2D, y: number) {
@@ -252,13 +300,9 @@ export function drawOrbactVisual(canvas: HTMLCanvasElement, options: VisualOptio
   canvas.height = height
   drawBackdrop(ctx, width, height, options.layout ?? 'editorial', options.artwork)
   drawBrand(ctx, width)
-  if (options.kicker?.trim()) {
-    ctx.fillStyle = CYAN
-    ctx.font = `650 30px ${FONT}`
-    ctx.fillText(options.kicker.trim().toUpperCase().slice(0, 60), 110, height === 1350 ? 340 : 310)
-  }
-  const title = drawHeadline(ctx, options, height)
-  const bodyFits = drawBody(ctx, options.body ?? '', title.bottom + 68, height)
+  if (options.kicker?.trim()) drawKicker(ctx, options.kicker)
+  const placement = placeText(ctx, options, height)
+  if (placement) drawText(ctx, placement)
   drawFooter(ctx, width, height, options.footer ?? 'post', options.slideNumber)
-  return title.fits && bodyFits
+  return Boolean(placement)
 }
