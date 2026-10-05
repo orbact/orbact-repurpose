@@ -14,9 +14,10 @@ function downloadBlob(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
 }
 
-export default function ImageStudio({ outputs, aiEnabled }: {
+export default function ImageStudio({ outputs, aiEnabled, onPrepareForPublishing }: {
   outputs: GeneratedContent
   aiEnabled: boolean
+  onPrepareForPublishing: (file: File) => void
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const objectUrl = useRef<string | null>(null)
@@ -32,6 +33,7 @@ export default function ImageStudio({ outputs, aiEnabled }: {
   const [headlineFits, setHeadlineFits] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [prepared, setPrepared] = useState(false)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -65,6 +67,19 @@ export default function ImageStudio({ outputs, aiEnabled }: {
     canvasRef.current?.toBlob((blob) => {
       if (blob) downloadBlob(blob, `orbact-${format}-post.png`)
     }, 'image/png')
+  }
+
+  function prepareForPublishing() {
+    if (!renderReady || !headlineFits) return
+    canvasRef.current?.toBlob((blob) => {
+      if (!blob || blob.size > 4_000_000) {
+        setError('This finished image is too large for Instagram. Choose a simpler artwork or layout.')
+        return
+      }
+      onPrepareForPublishing(new File([blob], 'orbact-post.jpg', { type: 'image/jpeg' }))
+      setError(null)
+      setPrepared(true)
+    }, 'image/jpeg', 0.88)
   }
 
   async function generateImage() {
@@ -151,7 +166,11 @@ export default function ImageStudio({ outputs, aiEnabled }: {
               <option value={0}>None</option>
             </select>
           </div>
-          <button type="button" onClick={downloadCard} disabled={!headline.trim() || !renderReady || !headlineFits} className="btn-primary text-sm">Download finished PNG</button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={downloadCard} disabled={!headline.trim() || !renderReady || !headlineFits} className="btn-primary text-sm">Download finished PNG</button>
+            <button type="button" onClick={prepareForPublishing} disabled={!headline.trim() || !renderReady || !headlineFits} className="btn-secondary text-sm">Use for Instagram</button>
+          </div>
+          {prepared && <p role="status" className="text-xs text-success">JPEG ready. In Content calendar, select Instagram and attach the finished design.</p>}
           <p className="text-xs text-muted">{format === 'square' ? '1080 × 1080' : '1080 × 1350'} pixels. Review the final image before posting.</p>
         </div>
         <canvas ref={canvasRef} aria-label="Preview of the finished branded social image" role="img" className="w-full max-w-[360px] h-auto rounded-md border border-white/10 bg-[#171717]" />

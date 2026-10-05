@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { AIProviderBusyError, generateRepurposedContent } from '@/lib/ai/generate-content'
+import { AIContentValidationError, AIProviderBusyError, AIProviderUnavailableError, generateRepurposedContent } from '@/lib/ai/generate-content'
 import { MAX_INPUT_CHARS } from '@/lib/extract'
 import { readJsonBody, RequestBodyError } from '@/lib/http/read-json'
 import { generateRateLimit } from '@/lib/rate-limit'
@@ -148,6 +148,9 @@ export async function POST(req: NextRequest) {
         error: `The free AI service is busy. Your credit was refunded. Try again in about ${error.retryAfterSeconds} seconds.`,
         creditRefunded: true,
       }, { status: 429, headers: { 'Retry-After': String(error.retryAfterSeconds) } })
+    }
+    if (error instanceof AIContentValidationError || error instanceof AIProviderUnavailableError) {
+      return NextResponse.json({ error: `${error.message} Your credit was refunded.`, creditRefunded: true }, { status: 502 })
     }
     return NextResponse.json({
       error: 'Content creation failed. Your credit was refunded; please try again.',

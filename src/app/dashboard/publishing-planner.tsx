@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { GeneratedContent } from '@/lib/ai/content-schema'
 
 type Platform = 'linkedin' | 'x' | 'instagram' | 'facebook'
@@ -23,19 +23,27 @@ function contentFor(platform: Platform, outputs: GeneratedContent): string {
 }
 
 export default function PublishingPlanner({
-  outputs, generationId,
+  outputs, generationId, preparedImage,
 }: {
   outputs: GeneratedContent | null
   generationId: string | null
+  preparedImage: File | null
 }) {
   const [platform, setPlatform] = useState<Platform>('linkedin')
   const [scheduledAt, setScheduledAt] = useState('')
   const [content, setContent] = useState('')
+  const [editedPosts, setEditedPosts] = useState<Partial<Record<Platform, string>>>({})
   const [deliveryMode, setDeliveryMode] = useState<'manual' | 'managed'>('manual')
+  const [postAll, setPostAll] = useState(false)
+  const [publishWhen, setPublishWhen] = useState<'now' | 'later'>('later')
+  const requestIds = useRef<Partial<Record<Platform, string>>>({})
+  const [attemptFinished, setAttemptFinished] = useState(false)
   const [mediaUrl, setMediaUrl] = useState('')
   const [connected, setConnected] = useState<Platform[]>([])
   const [uploading, setUploading] = useState(false)
   const [items, setItems] = useState<CalendarItem[]>([])
+  const [reviewIds, setReviewIds] = useState<Record<string, string>>({})
+  const [reviewedNoPost, setReviewedNoPost] = useState<Record<string, boolean>>({})
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -58,13 +66,19 @@ export default function PublishingPlanner({
 
   function selectPlatform(next: Platform) {
     setPlatform(next)
-    setDeliveryMode('manual')
-    setMediaUrl('')
-    if (outputs) setContent(contentFor(next, outputs))
+    if (deliveryMode === 'managed' && !connected.includes(next)) {
+      setDeliveryMode('manual')
+      setPostAll(false)
+    }
+    if (outputs) setContent(editedPosts[next] ?? contentFor(next, outputs))
   }
 
   function useCurrentDraft() {
-    if (outputs) setContent(contentFor(platform, outputs))
+    if (outputs) {
+      const draft = contentFor(platform, outputs)
+      setContent(draft)
+      setEditedPosts((current) => ({ ...current, [platform]: draft }))
+    }
   }
 
   async function uploadImage(file: File | undefined) {
@@ -95,38 +109,85 @@ export default function PublishingPlanner({
     event.preventDefault()
     setError(null)
     setNotice(null)
-    const date = new Date(scheduledAt)
+    const publishNow = deliveryMode === 'managed' && publishWhen === 'now'
+    const date = publishNow ? new Date() : new Date(scheduledAt)
     if (!Number.isFinite(date.valueOf())) {
       setError('Choose a valid date and time.')
       return
     }
-    if (deliveryMode === 'managed' && platform === 'instagram' && !mediaUrl) {
+    const targets = deliveryMode === 'managed' && postAll ? connected.filter((item) => item !== 'x') : [platform]
+    if (targets.length === 0) {
+      setError('No connected platform is available for automatic publishing.')
+      return
+    }
+    if (deliveryMode === 'managed' && targets.includes('instagram') && !mediaUrl) {
       setError('Upload a JPEG before scheduling Instagram publishing.')
       return
     }
+    const requestKey = `orbact-publish-request:${generationId ?? 'draft'}`
+    if (publishNow && Object.keys(requestIds.current).length === 0) {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem(requestKey) || '{}') as Partial<Record<Platform, string>>
+        if (saved && typeof saved === 'object') requestIds.current = saved
+      } catch { /* A fresh request ID will be used. */ }
+    }
+    const posts = targets.map((target) => {
+      const copy = target === platform && content.trim()
+        ? content : editedPosts[target] ?? (outputs ? contentFor(target, outputs) : '')
+      return {
+        ...(publishNow ? { id: requestIds.current[target] ??= crypto.randomUUID() } : {}),
+        platform: target, content: copy,
+        mediaUrl: target === 'instagram' ? mediaUrl : null,
+        thread: target === 'x' ? copy.split(/\n\s*\n/).map((post) => post.trim()).filter(Boolean) : null,
+      }
+    })
+    if (publishNow) sessionStorage.setItem(requestKey, JSON.stringify(requestIds.current))
     setBusy(true)
     try {
       const response = await fetch('/api/calendar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          platform, content, scheduledAt: date.toISOString(), generationId,
-          deliveryMode, mediaUrl,
-          thread: platform === 'x' ? content.split(/\n\s*\n/).map((post) => post.trim()).filter(Boolean) : null,
+          posts, scheduledAt: date.toISOString(), generationId, deliveryMode, publishNow,
         }),
       })
       const body = await response.json()
       if (!response.ok) throw new Error(body.error || 'Could not add to calendar')
-      setNotice(deliveryMode === 'managed'
-        ? 'Approved and queued. Review its publishing status here.'
-        : 'Added to your calendar. Check this page on the planned date, then copy and publish it manually.')
+      if (publishNow) {
+        const results = body.items as Array<{ status: string }> | undefined
+        const uncertain = results?.some((item) => item.status === 'needs_review' || item.status === 'publishing')
+        const published = results?.filter((item) => item.status === 'published').length ?? 0
+        const failed = results?.filter((item) => item.status === 'failed').length ?? 0
+        const queued = results?.filter((item) => item.status === 'queued').length ?? 0
+        setNotice(uncertain
+          ? 'At least one delivery needs review. Check its platform and calendar status before taking another action.'
+          : `Publishing result: ${published} published, ${failed} failed, ${queued} queued. Review each platform below.`)
+        setAttemptFinished(true)
+      } else {
+        setNotice(deliveryMode === 'managed'
+          ? `${posts.length} approved post${posts.length === 1 ? '' : 's'} queued. Review each publishing status here.`
+          : 'Added to your calendar. Check this page on the planned date, then copy and publish it manually.')
+      }
       setRefreshKey((key) => key + 1)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not add this plan.')
+      setError(publishNow && cause instanceof TypeError
+        ? 'The connection was interrupted. Refresh the calendar and check each platform before retrying this same request.'
+        : cause instanceof Error ? cause.message : 'Could not add this plan.')
+      if (publishNow) setRefreshKey((key) => key + 1)
     } finally {
       setBusy(false)
     }
   }
+
+  function startNewPublish() {
+    requestIds.current = {}
+    sessionStorage.removeItem(`orbact-publish-request:${generationId ?? 'draft'}`)
+    setAttemptFinished(false)
+    setNotice(null)
+  }
+
+  const needsInstagramMedia = deliveryMode === 'managed' &&
+    (platform === 'instagram' || (postAll && connected.includes('instagram')))
 
   async function changeItem(id: string, method: 'PATCH' | 'DELETE') {
     setError(null)
@@ -142,6 +203,27 @@ export default function PublishingPlanner({
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not update calendar')
     }
+  }
+
+  async function resolveItem(id: string, resolution: 'published' | 'failed') {
+    setError(null)
+    setBusy(true)
+    try {
+      const response = await fetch('/api/calendar', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id, resolution, externalPostId: reviewIds[id] || '',
+          confirmNoPost: reviewedNoPost[id] === true,
+        }),
+      })
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.error || 'Could not resolve the post')
+      setNotice(resolution === 'published' ? 'Confirmed platform post recorded.' : 'Confirmed no post was found; this job will not retry.')
+      setRefreshKey((key) => key + 1)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not resolve the post')
+    } finally { setBusy(false) }
   }
 
   async function copyText(text: string, label: string) {
@@ -172,36 +254,67 @@ export default function PublishingPlanner({
           </div>
           <div>
             <label htmlFor="plan-date" className="block text-sm text-muted mb-2">Local date and time</label>
-            <input id="plan-date" type="datetime-local" required value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} className="input-field" />
+            <input id="plan-date" type="datetime-local" required={deliveryMode === 'manual' || publishWhen === 'later'} disabled={deliveryMode === 'managed' && publishWhen === 'now'} value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} className="input-field" />
           </div>
           <div>
             <label htmlFor="delivery-mode" className="block text-sm text-muted mb-2">Delivery</label>
-            <select id="delivery-mode" value={deliveryMode} onChange={(event) => setDeliveryMode(event.target.value as 'manual' | 'managed')} className="input-field">
+            <select id="delivery-mode" value={deliveryMode} onChange={(event) => {
+              const next = event.target.value as 'manual' | 'managed'
+              setDeliveryMode(next)
+              if (next === 'manual') setPostAll(false)
+            }} className="input-field">
               <option value="manual">Manual plan</option>
               {connected.includes(platform) && <option value="managed">Publish automatically</option>}
             </select>
           </div>
           <button type="button" onClick={useCurrentDraft} className="btn-secondary text-sm">Use current draft</button>
+          {deliveryMode === 'managed' && <fieldset className="md:col-span-2 xl:col-span-4 flex flex-wrap gap-5 rounded-xl border border-border p-4 text-sm">
+            <legend className="px-1 text-muted">When to publish</legend>
+            <label className="flex items-center gap-2"><input type="radio" name="publish-when" checked={publishWhen === 'now'} onChange={() => setPublishWhen('now')} />Publish now</label>
+            <label className="flex items-center gap-2"><input type="radio" name="publish-when" checked={publishWhen === 'later'} onChange={() => setPublishWhen('later')} />Schedule for later</label>
+          </fieldset>}
           <div className="md:col-span-2 xl:col-span-4">
             <label htmlFor="plan-content" className="block text-sm text-muted mb-2">Post copy {platform === 'x' ? '(separate thread posts with a blank line)' : ''}</label>
-            <textarea id="plan-content" value={content} onChange={(event) => setContent(event.target.value)} minLength={10} maxLength={5000} rows={5} required className="input-field resize-y" placeholder="Use current draft, then review the copy" />
+            <textarea id="plan-content" value={content} onChange={(event) => {
+              setContent(event.target.value)
+              setEditedPosts((current) => ({ ...current, [platform]: event.target.value }))
+            }} minLength={10} maxLength={5000} rows={5} required={!postAll} className="input-field resize-y" placeholder="Use current draft, then review the copy" />
           </div>
-          {deliveryMode === 'managed' && platform === 'instagram' && (
+          {deliveryMode === 'managed' && connected.filter((item) => item !== 'x').length > 1 && (
+            <div className="md:col-span-2 xl:col-span-4 rounded-xl border border-border p-4">
+              <label className="flex items-center gap-3 text-sm font-medium">
+                <input type="checkbox" checked={postAll} onChange={(event) => setPostAll(event.target.checked)} />
+                Publish all connected Orbact platforms
+              </label>
+              <p className="text-xs text-muted mt-2">Selected: {connected.filter((item) => item !== 'x').join(', ')}. X remains manual. The current platform copy is editable above; switch platforms to review each draft.</p>
+              {postAll && outputs && <div className="grid md:grid-cols-3 gap-3 mt-4">
+                {connected.filter((item) => item !== 'x').map((target) => <div key={target} className="rounded-lg border border-border bg-white/[0.025] p-3">
+                  <p className="text-xs uppercase tracking-wider text-violet-300">{target === 'facebook' ? 'Facebook Page' : target}</p>
+                  <p className="text-xs text-muted mt-2 whitespace-pre-wrap max-h-48 overflow-auto">{target === platform && content.trim() ? content : editedPosts[target] ?? contentFor(target, outputs)}</p>
+                </div>)}
+              </div>}
+            </div>
+          )}
+          {needsInstagramMedia && (
             <div className="md:col-span-2 xl:col-span-4 rounded-xl border border-border p-4">
               <label htmlFor="plan-image" className="block text-sm mb-2">Instagram JPEG (under 4 MB)</label>
               <input id="plan-image" type="file" accept="image/jpeg" onChange={(event) => uploadImage(event.target.files?.[0])} className="text-sm text-muted" />
+              {preparedImage && <button type="button" onClick={() => void uploadImage(preparedImage)} disabled={uploading} className="btn-secondary text-xs mt-3">Attach finished Image Studio design</button>}
               <p className="text-xs text-muted mt-2">The image is stored in a public bucket so Instagram can fetch it. Avoid private or sensitive images.</p>
               {uploading && <p role="status" className="text-xs text-violet-300 mt-2">Uploading image...</p>}
               {mediaUrl && <p role="status" className="text-xs text-success mt-2">Image ready for scheduling.</p>}
             </div>
           )}
-          {deliveryMode === 'managed' && <p className="text-xs text-warning md:col-span-2 xl:col-span-4">Scheduling approves this exact copy and media for automatic delivery. Check it carefully before submitting. On this free prototype, due posts are checked once daily around 12:00–13:00 UTC, so delivery may wait until the next day.</p>}
-          <button type="submit" disabled={busy || uploading} className="btn-primary text-sm justify-self-start">{busy ? 'Scheduling...' : deliveryMode === 'managed' ? 'Approve & schedule' : 'Add reminder'}</button>
+          {deliveryMode === 'managed' && <p className="text-xs text-warning md:col-span-2 xl:col-span-4">Your click approves the exact copy and media for every selected platform. Review all previews before publishing. Scheduled posts on this free prototype are checked once daily around 12:00–13:00 UTC and may wait until the next day.</p>}
+          <button type="submit" disabled={busy || uploading || (publishWhen === 'now' && attemptFinished)} className="btn-primary text-sm justify-self-start">{busy ? 'Processing...' : deliveryMode === 'managed' ? publishWhen === 'now' ? postAll ? 'Approve & publish all now' : 'Approve & publish now' : postAll ? 'Approve & schedule all' : 'Approve & schedule' : 'Add reminder'}</button>
+          {attemptFinished && <button type="button" onClick={startNewPublish} className="btn-secondary text-sm justify-self-start">Start a new publishing request</button>}
           {platform === 'instagram' && deliveryMode === 'manual' && <p className="text-xs text-warning md:col-span-2 xl:col-span-4">Instagram needs an image. Download a carousel PNG or prepare another visual before publishing.</p>}
         </form>
       )}
       {error && <p role="alert" className="text-danger text-sm mt-4">{error}</p>}
       {notice && <p role="status" className="text-success text-sm mt-4">{notice}</p>}
+      {items.some((item) => item.status === 'needs_review') &&
+        <p role="alert" className="text-sm text-warning mt-5 rounded-xl border border-warning/30 bg-warning/10 p-4">A delivery needs review. Check the actual social account and Make receipt before resolving it. Do not create another post until its outcome is known.</p>}
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3 mt-7">
         {items.map((item) => (
           <div key={item.id} className="rounded-xl border border-border bg-white/[0.025] p-4">
@@ -213,6 +326,18 @@ export default function PublishingPlanner({
             <p className="text-sm text-muted mt-3 line-clamp-3 whitespace-pre-wrap">{item.content}</p>
             {item.last_error && <p className="text-xs text-warning mt-3">{item.last_error}</p>}
             {item.external_post_id && <p className="text-xs text-muted mt-2">Platform ID: {item.external_post_id}</p>}
+            {item.status === 'needs_review' && <div className="mt-4 rounded-lg border border-warning/30 p-3 space-y-3">
+              <p className="text-xs text-warning">Verify this job on the platform before choosing an outcome.</p>
+              <label className="block text-xs text-muted">Confirmed platform post ID
+                <input value={reviewIds[item.id] || ''} maxLength={200} onChange={(event) => setReviewIds((current) => ({ ...current, [item.id]: event.target.value }))} className="input-field mt-1" />
+              </label>
+              <button type="button" disabled={busy || !reviewIds[item.id]?.trim()} onClick={() => void resolveItem(item.id, 'published')} className="btn-secondary text-xs">Confirm published</button>
+              <label className="flex items-start gap-2 text-xs text-muted">
+                <input type="checkbox" checked={reviewedNoPost[item.id] || false} onChange={(event) => setReviewedNoPost((current) => ({ ...current, [item.id]: event.target.checked }))} />
+                I checked the platform and Make receipt; no post exists.
+              </label>
+              <button type="button" disabled={busy || !reviewedNoPost[item.id]} onClick={() => void resolveItem(item.id, 'failed')} className="btn-secondary text-xs">Mark no post found</button>
+            </div>}
             <div className="flex flex-wrap gap-4 mt-4">
               <button type="button" className="text-xs text-violet-300 hover:underline" onClick={() => copyText(item.content, 'Post copy')}>Copy all</button>
               {item.delivery_mode === 'manual' && item.platform === 'x' &&

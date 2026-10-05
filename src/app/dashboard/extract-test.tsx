@@ -24,6 +24,7 @@ export default function ExtractTest({ initialBrief, imageGenerationEnabled }: {
   const [input, setInput] = useState('')
   const [extracted, setExtracted] = useState<ExtractResult | null>(null)
   const [outputs, setOutputs] = useState<GeneratedContent | null>(null)
+  const [preparedImage, setPreparedImage] = useState<File | null>(null)
   const [brief, setBrief] = useState<GenerationBrief>(initialBrief ?? DEFAULT_BRIEF)
   const [brandNotice, setBrandNotice] = useState<string | null>(null)
   const [generationId, setGenerationId] = useState<string | null>(null)
@@ -66,6 +67,7 @@ export default function ExtractTest({ initialBrief, imageGenerationEnabled }: {
     setError(null)
     setExtracted(null)
     setOutputs(null)
+    setPreparedImage(null)
     setGenerationId(null)
     setRequestId(null)
     setSaveNotice(null)
@@ -126,6 +128,7 @@ export default function ExtractTest({ initialBrief, imageGenerationEnabled }: {
       }
       setGenerationId(data.id)
       setOutputs(data.outputs)
+      setPreparedImage(null)
       setDraftTitle(extracted.title)
       setRequestId(null)
       setHistoryKey((key) => key + 1)
@@ -262,6 +265,7 @@ export default function ExtractTest({ initialBrief, imageGenerationEnabled }: {
 
         <HistoryPanel refreshKey={historyKey} onOpen={(item) => {
           setOutputs(item.outputs)
+          setPreparedImage(null)
           setGenerationId(item.id)
           setDraftTitle(item.title)
           setSaveNotice(null)
@@ -271,8 +275,9 @@ export default function ExtractTest({ initialBrief, imageGenerationEnabled }: {
 
       {outputs && <OutputWorkspace outputs={outputs} imageGenerationEnabled={imageGenerationEnabled} onChange={(next) => { setOutputs(next); setSaveNotice(null) }}
         title={draftTitle} onTitleChange={(next) => { setDraftTitle(next); setSaveNotice(null) }}
-        onSave={saveEdits} saving={saving} saveNotice={saveNotice} generationId={generationId} />}
-      <PublishingPlanner outputs={outputs} generationId={generationId} />
+        onSave={saveEdits} saving={saving} saveNotice={saveNotice} generationId={generationId}
+        onPrepareForPublishing={setPreparedImage} />}
+      <PublishingPlanner key={generationId ?? 'no-draft'} outputs={outputs} generationId={generationId} preparedImage={preparedImage} />
     </div>
   )
 }

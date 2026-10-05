@@ -35,12 +35,12 @@ Return only valid JSON with exactly these keys:
   }
 }
 
-LinkedIn: 120-250 words, short paragraphs, useful insight, ending with a relevant question or CTA.
-Facebook Page: 80-180 words, friendly and direct, with a practical takeaway. Write as a business Page, not an individual founder's personal update. Avoid duplicating the LinkedIn opening.
-X: 4-7 standalone posts, each at most 280 characters, no manual numbering, a clear narrative.
-Instagram: 80-180 words, concise hook and practical takeaway, up to two natural emojis.
-Hashtags: 5-10 specific tags as strings without #.
-Carousel: a short cover hook, 3-4 useful slides, each with a short headline, optional accent, and body under 140 characters. Closing slide should be specific to the topic and CTA.
+LinkedIn: 90-150 words, short paragraphs, useful insight, ending with a relevant question or CTA.
+Facebook Page: 60-110 words, friendly and direct, with a practical takeaway. Write as a business Page, not an individual founder's personal update. Avoid duplicating the LinkedIn opening.
+X: 3-5 standalone posts, each at most 280 characters, no manual numbering, a clear narrative.
+Instagram: 60-110 words, concise hook and practical takeaway, up to two natural emojis.
+Hashtags: 5-8 specific tags as strings without #.
+Carousel: a short cover hook, 2-3 useful slides, each with a short headline, optional accent, and body under 120 characters. Closing slide should be specific to the topic and CTA.
 Image prompt: 15-45 words, visually specific, suitable for a square social image, without lettering or brand marks.
 Do not put Markdown asterisks in any field.`
 
@@ -51,6 +51,20 @@ export class AIProviderBusyError extends Error {
     super('The free AI service is temporarily at capacity.')
     this.name = 'AIProviderBusyError'
     this.retryAfterSeconds = retryAfterSeconds
+  }
+}
+
+export class AIProviderUnavailableError extends Error {
+  constructor() {
+    super('The AI service could not complete this request. Try again shortly or use a shorter source.')
+    this.name = 'AIProviderUnavailableError'
+  }
+}
+
+export class AIContentValidationError extends Error {
+  constructor() {
+    super('The AI returned incomplete drafts. Try again with a shorter source or a simpler brief.')
+    this.name = 'AIContentValidationError'
   }
 }
 
@@ -68,7 +82,7 @@ export async function generateRepurposedContent(
   brief: GenerationBrief
 ): Promise<GeneratedContent> {
   const apiKey = process.env.GROQ_API_KEY
-  if (!apiKey) throw new Error('Content generation is not configured. Your credit was refunded.')
+  if (!apiKey) throw new AIProviderUnavailableError()
   const groq = new Groq({ apiKey, timeout: 20_000, maxRetries: 0 })
   const deadline = Date.now() + 50_000
   const userContent = JSON.stringify({
@@ -91,18 +105,18 @@ export async function generateRepurposedContent(
           model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
           messages: [
             { role: 'system', content: SYSTEM_PROMPT },
-            ...(attempt ? [{ role: 'system' as const, content: 'The previous response failed validation. Follow the JSON shape and character limits exactly.' }] : []),
+            ...(attempt ? [{ role: 'system' as const, content: 'The previous response was incomplete or broke a character limit. Return every required key. Keep each field concise, with 2-3 carousel slides and 3-5 X posts. Return a complete JSON object.' }] : []),
             { role: 'user', content: userContent },
           ],
           response_format: { type: 'json_object' },
           temperature: attempt ? 0.35 : 0.6,
-          max_tokens: 2200,
+          max_tokens: 2600,
           reasoning_effort: 'low',
         })
         break
       } catch (error) {
         const waitSeconds = rateLimitWait(error)
-        if (waitSeconds === null) throw error
+        if (waitSeconds === null) throw new AIProviderUnavailableError()
         if (providerAttempt > 0 || waitSeconds > 20 || Date.now() + waitSeconds * 1000 + 20_000 > deadline) {
           throw new AIProviderBusyError(waitSeconds)
         }
@@ -119,7 +133,7 @@ export async function generateRepurposedContent(
       // One correction attempt is cheaper than charging a second credit.
     }
   }
-  throw new Error('The AI returned incomplete content. Your credit was refunded; please try again.')
+  throw new AIContentValidationError()
 }
 
 export type { GeneratedContent, GenerationBrief } from './content-schema.ts'

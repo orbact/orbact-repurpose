@@ -74,6 +74,7 @@ async function downloadCarouselSlide(headline: string, body: string, index: numb
 
 export default function OutputWorkspace({
   outputs, onChange, title, onTitleChange, onSave, saving, saveNotice, generationId, imageGenerationEnabled,
+  onPrepareForPublishing,
 }: {
   outputs: GeneratedContent
   onChange: (outputs: GeneratedContent) => void
@@ -84,6 +85,7 @@ export default function OutputWorkspace({
   saveNotice: string | null
   generationId: string | null
   imageGenerationEnabled: boolean
+  onPrepareForPublishing: (file: File) => void
 }) {
   const [copied, setCopied] = useState<string | null>(null)
   const [copyError, setCopyError] = useState<string | null>(null)
@@ -261,7 +263,7 @@ export default function OutputWorkspace({
           )}
         </div>
       </article>
-      <ImageStudio key={generationId ?? 'draft'} outputs={outputs} aiEnabled={imageGenerationEnabled} />
+      <ImageStudio key={generationId ?? 'draft'} outputs={outputs} aiEnabled={imageGenerationEnabled} onPrepareForPublishing={onPrepareForPublishing} />
     </section>
   )
 }

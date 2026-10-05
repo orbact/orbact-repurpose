@@ -3,6 +3,10 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { readJsonBody, RequestBodyError } from '@/lib/http/read-json'
 import { managedPublishingPlatforms } from '@/lib/publishing-config'
+import { makeWebhookUrl } from '@/lib/publishing-config'
+import { dispatchClaimedJob, type PublishingJob } from '@/lib/publishing/dispatch'
+
+export const maxDuration = 60
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const platforms = new Set(['linkedin', 'x', 'instagram', 'facebook'])
@@ -15,7 +19,7 @@ async function currentUser() {
 
 async function bodyOf(req: NextRequest): Promise<Record<string, unknown> | NextResponse> {
   try {
-    const body = await readJsonBody(req, 8_000)
+    const body = await readJsonBody(req, 24_000)
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
@@ -55,41 +59,36 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await bodyOf(req)
   if (body instanceof NextResponse) return body
-  const platform = body.platform
   const deliveryMode = body.deliveryMode ?? 'manual'
-  const content = typeof body.content === 'string' ? body.content.trim() : ''
-  const scheduledAt = typeof body.scheduledAt === 'string' ? Date.parse(body.scheduledAt) : NaN
-  if (typeof platform !== 'string' || !platforms.has(platform) ||
-      content.length < 10 || content.length > 5_000 ||
-      !Number.isFinite(scheduledAt) ||
+  const publishNow = body.publishNow === true
+  if (body.publishNow !== undefined && typeof body.publishNow !== 'boolean') {
+    return NextResponse.json({ error: 'Invalid publishing action.' }, { status: 400 })
+  }
+  if (publishNow && deliveryMode !== 'managed') {
+    return NextResponse.json({ error: 'Immediate publishing requires a connected platform.' }, { status: 400 })
+  }
+  const scheduledAt = publishNow ? Date.now() : typeof body.scheduledAt === 'string' ? Date.parse(body.scheduledAt) : NaN
+  if (!Number.isFinite(scheduledAt) ||
       scheduledAt < Date.now() - 300_000 ||
       scheduledAt > Date.now() + 366 * 24 * 60 * 60 * 1000) {
-    return NextResponse.json({ error: 'Choose a platform, date within one year, and 10–5,000 characters of content.' }, { status: 400 })
+    return NextResponse.json({ error: 'Choose a date within one year.' }, { status: 400 })
   }
   if (deliveryMode !== 'manual' && deliveryMode !== 'managed') {
     return NextResponse.json({ error: 'Invalid delivery mode' }, { status: 400 })
   }
-  if (deliveryMode === 'managed' && platform === 'instagram' && content.length > 2_200) {
-    return NextResponse.json({ error: 'Instagram captions must be at most 2,200 characters.' }, { status: 400 })
+  const posts = body.posts === undefined ? [body] : body.posts
+  if (!Array.isArray(posts) || posts.length < 1 || posts.length > 4 ||
+      posts.some((post) => !post || typeof post !== 'object' || Array.isArray(post))) {
+    return NextResponse.json({ error: 'Choose one to four platform posts.' }, { status: 400 })
   }
-  const thread = body.thread
-  if (deliveryMode === 'managed' && platform === 'x' &&
-      (!Array.isArray(thread) || thread.length < 3 || thread.length > 8 ||
-       thread.some((post) => typeof post !== 'string' || !post.trim() || post.length > 280))) {
-    return NextResponse.json({ error: 'X publishing requires a valid thread of 3–8 posts.' }, { status: 400 })
+  const selected = posts as Record<string, unknown>[]
+  const selectedPlatforms = selected.map((post) => post.platform)
+  if (selectedPlatforms.some((platform) => typeof platform !== 'string' || !platforms.has(platform)) ||
+      new Set(selectedPlatforms).size !== selectedPlatforms.length) {
+    return NextResponse.json({ error: 'Choose each supported platform only once.' }, { status: 400 })
   }
-  const mediaUrl = typeof body.mediaUrl === 'string' ? body.mediaUrl.trim() : ''
-  if (deliveryMode === 'managed' && platform === 'instagram') {
-    let url: URL
-    try { url = new URL(mediaUrl) } catch {
-      return NextResponse.json({ error: 'Instagram publishing needs a public JPEG URL.' }, { status: 400 })
-    }
-    if (url.protocol !== 'https:' ||
-        url.hostname !== new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).hostname ||
-        !url.pathname.startsWith(`/storage/v1/object/public/publishing/${user.id}/`) ||
-        !url.pathname.endsWith('.jpg') || url.search || url.hash) {
-      return NextResponse.json({ error: 'Use a JPEG from the Orbact publishing media bucket.' }, { status: 400 })
-    }
+  if (publishNow && selected.some((post) => typeof post.id !== 'string' || !UUID.test(post.id))) {
+    return NextResponse.json({ error: 'Publishing request IDs are missing.' }, { status: 400 })
   }
   const generationId = body.generationId
   if (generationId !== null && generationId !== undefined &&
@@ -97,22 +96,58 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid draft ID' }, { status: 400 })
   }
   const admin = createAdminClient()
+  let publisherUrl: URL | null = null
   if (deliveryMode === 'managed') {
-    if (!managedPublishingPlatforms().has(platform as 'linkedin' | 'x' | 'instagram' | 'facebook') ||
-        !process.env.MAKE_PUBLISH_WEBHOOK_URL || !process.env.MAKE_WEBHOOK_API_KEY) {
+    const allowed = managedPublishingPlatforms()
+    if (!process.env.MAKE_PUBLISH_WEBHOOK_URL || !process.env.MAKE_WEBHOOK_API_KEY ||
+        selectedPlatforms.some((platform) => !allowed.has(platform as 'linkedin' | 'x' | 'instagram' | 'facebook'))) {
       return NextResponse.json({ error: 'Managed publishing is not configured.' }, { status: 503 })
     }
-    const { data: connection } = await admin.from('publishing_connections')
-      .select('id').eq('user_id', user.id).eq('platform', platform).eq('enabled', true).single()
-    if (!connection) return NextResponse.json({ error: 'This platform is not connected for managed publishing.' }, { status: 403 })
+    const { data: connections, error } = await admin.from('publishing_connections')
+      .select('platform').eq('user_id', user.id).in('platform', selectedPlatforms as string[]).eq('enabled', true)
+    if (error || connections?.length !== selected.length) {
+      return NextResponse.json({ error: 'One or more selected platforms are not connected.' }, { status: 403 })
+    }
+    if (publishNow) {
+      try { publisherUrl = makeWebhookUrl(process.env.MAKE_PUBLISH_WEBHOOK_URL!) } catch {
+        return NextResponse.json({ error: 'Publishing webhook is not configured correctly.' }, { status: 503 })
+      }
+    }
   }
   if (generationId) {
     const { data: generation, error } = await admin.from('generations')
       .select('id').eq('id', generationId).eq('user_id', user.id).eq('status', 'complete').single()
     if (error || !generation) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
   }
-  const { data, error } = await admin.from('publish_queue')
-    .insert({
+  const rows = []
+  for (const post of selected) {
+    const platform = post.platform as string
+    const content = typeof post.content === 'string' ? post.content.trim() : ''
+    if (content.length < 10 || content.length > 5_000 ||
+        (deliveryMode === 'managed' && platform === 'instagram' && content.length > 2_200)) {
+      return NextResponse.json({ error: `${platform} copy is missing or too long.` }, { status: 400 })
+    }
+    const thread = post.thread
+    if (deliveryMode === 'managed' && platform === 'x' &&
+        (!Array.isArray(thread) || thread.length < 3 || thread.length > 8 ||
+         thread.some((part) => typeof part !== 'string' || !part.trim() || part.length > 280))) {
+      return NextResponse.json({ error: 'X publishing requires a valid thread of 3–8 posts.' }, { status: 400 })
+    }
+    const mediaUrl = typeof post.mediaUrl === 'string' ? post.mediaUrl.trim() : ''
+    if (deliveryMode === 'managed' && platform === 'instagram') {
+      let url: URL
+      try { url = new URL(mediaUrl) } catch {
+        return NextResponse.json({ error: 'Instagram publishing needs a public JPEG URL.' }, { status: 400 })
+      }
+      if (url.protocol !== 'https:' ||
+          url.hostname !== new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).hostname ||
+          !url.pathname.startsWith(`/storage/v1/object/public/publishing/${user.id}/`) ||
+          !url.pathname.endsWith('.jpg') || url.search || url.hash) {
+        return NextResponse.json({ error: 'Use a JPEG from the Orbact publishing media bucket.' }, { status: 400 })
+      }
+    }
+    rows.push({
+      ...(publishNow ? { id: post.id as string } : {}),
       user_id: user.id,
       generation_id: generationId || null,
       platform,
@@ -124,10 +159,42 @@ export async function POST(req: NextRequest) {
       status: deliveryMode === 'managed' ? 'queued' : 'planned',
       approved_at: deliveryMode === 'managed' ? new Date().toISOString() : null,
     })
-    .select('id')
-    .single()
-  if (error || !data) return NextResponse.json({ error: 'Could not add to calendar' }, { status: 503 })
-  return NextResponse.json({ id: data.id }, { status: 201 })
+  }
+  const { data, error } = await admin.from('publish_queue').insert(rows).select('id,platform')
+  if (publishNow && error?.code === '23505') {
+    const ids = selected.map((post) => post.id as string)
+    const { data: existing, error: existingError } = await admin.from('publish_queue')
+      .select('id,platform,content,media_url,delivery_mode,status,external_post_id,last_error')
+      .eq('user_id', user.id).in('id', ids)
+    if (!existingError && existing?.length === selected.length && existing.every((item) => {
+      const original = selected.find((post) => post.id === item.id)
+      return original && original.platform === item.platform &&
+        typeof original.content === 'string' && original.content.trim() === item.content &&
+        (original.mediaUrl || null) === item.media_url && item.delivery_mode === 'managed'
+    })) {
+      return NextResponse.json({ items: existing.map((item) => ({
+        id: item.id, platform: item.platform, status: item.status,
+        externalPostId: item.external_post_id, error: item.last_error,
+      })) })
+    }
+    return NextResponse.json({ error: 'Publishing request IDs were already used. Check your calendar before retrying.' }, { status: 409 })
+  }
+  if (error || !data || data.length !== rows.length) {
+    return NextResponse.json({ error: 'Could not add the selected posts to the calendar.' }, { status: 503 })
+  }
+  if (publishNow && publisherUrl) {
+    const allowed = managedPublishingPlatforms()
+    const results = await Promise.all(data.map(async (inserted) => {
+      const { data: claimed, error: claimError } = await admin.from('publish_queue')
+        .update({ status: 'publishing', dispatched_at: new Date().toISOString() })
+        .eq('id', inserted.id).eq('user_id', user.id).eq('status', 'queued')
+        .select('id,user_id,platform,content,thread,media_url,scheduled_at').single()
+      if (claimError || !claimed) return { id: inserted.id, status: 'queued' }
+      return dispatchClaimedJob(admin, claimed as PublishingJob, allowed, publisherUrl, process.env.MAKE_WEBHOOK_API_KEY!)
+    }))
+    return NextResponse.json({ items: results }, { status: 201 })
+  }
+  return NextResponse.json({ id: data[0].id, items: data }, { status: 201 })
 }
 
 export async function PATCH(req: NextRequest) {
@@ -135,6 +202,29 @@ export async function PATCH(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await bodyOf(req)
   if (body instanceof NextResponse) return body
+  if (typeof body.id === 'string' && UUID.test(body.id) && body.resolution) {
+    if (body.resolution !== 'published' && body.resolution !== 'failed') {
+      return NextResponse.json({ error: 'Choose a valid review outcome.' }, { status: 400 })
+    }
+    const externalPostId = typeof body.externalPostId === 'string' ? body.externalPostId.trim() : ''
+    if (body.resolution === 'published' && (!externalPostId || externalPostId.length > 200)) {
+      return NextResponse.json({ error: 'Enter the confirmed platform post ID.' }, { status: 400 })
+    }
+    if (body.resolution === 'failed' && body.confirmNoPost !== true) {
+      return NextResponse.json({ error: 'Confirm that you checked the platform and no post exists.' }, { status: 400 })
+    }
+    const { data, error } = await createAdminClient().from('publish_queue')
+      .update(body.resolution === 'published' ? {
+        status: 'published', published_at: new Date().toISOString(),
+        external_post_id: externalPostId, last_error: null,
+      } : {
+        status: 'failed', last_error: 'Reviewed: no platform post was found. A new post requires fresh approval.',
+      })
+      .eq('id', body.id).eq('user_id', user.id).eq('status', 'needs_review')
+      .select('id').single()
+    if (error || !data) return NextResponse.json({ error: 'Review item not found or already resolved.' }, { status: 404 })
+    return NextResponse.json({ updated: true })
+  }
   if (typeof body.id !== 'string' || !UUID.test(body.id) || body.status !== 'published') {
     return NextResponse.json({ error: 'Invalid calendar update' }, { status: 400 })
   }
