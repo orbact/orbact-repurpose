@@ -195,7 +195,7 @@ export default function PublishingPlanner({
               {mediaUrl && <p role="status" className="text-xs text-success mt-2">Image ready for scheduling.</p>}
             </div>
           )}
-          {deliveryMode === 'managed' && <p className="text-xs text-warning md:col-span-2 xl:col-span-4">Scheduling approves this exact copy and media for automatic delivery. Check it carefully before submitting.</p>}
+          {deliveryMode === 'managed' && <p className="text-xs text-warning md:col-span-2 xl:col-span-4">Scheduling approves this exact copy and media for automatic delivery. Check it carefully before submitting. On this free prototype, due posts are checked once daily around 12:00–13:00 UTC, so delivery may wait until the next day.</p>}
           <button type="submit" disabled={busy || uploading} className="btn-primary text-sm justify-self-start">{busy ? 'Scheduling...' : deliveryMode === 'managed' ? 'Approve & schedule' : 'Add reminder'}</button>
           {platform === 'instagram' && deliveryMode === 'manual' && <p className="text-xs text-warning md:col-span-2 xl:col-span-4">Instagram needs an image. Download a carousel PNG or prepare another visual before publishing.</p>}
         </form>
