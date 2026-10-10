@@ -58,7 +58,7 @@ export async function dispatchClaimedJob(
       }),
       cache: 'no-store',
       redirect: 'error',
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(15_000),
     })
     if (!response.ok) throw new Error('Publishing workflow returned HTTP ' + response.status)
     const result = parsePublisherResult(await response.json())

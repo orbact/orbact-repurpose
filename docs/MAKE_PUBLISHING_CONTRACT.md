@@ -6,7 +6,7 @@ The LinkedIn company Page test returned `urn:li:share:7512544666886496256`; the 
 
 Orbact sends an HTTPS `POST` from `/api/cron/publish` to a **new, dedicated** Make Custom webhook. Existing Make scenarios must not be reused or edited. The webhook must have Make's native **API Key authentication** enabled. Store its URL in the server-only `MAKE_PUBLISH_WEBHOOK_URL` variable and the matching key in `MAKE_WEBHOOK_API_KEY`. Orbact sends that key in `x-make-apikey`; Make checks it before running the scenario. Keep the webhook URL and key out of browser code, scenario notes, logs, and screenshots.
 
-The app waits at most 20 seconds for a definitive JSON response. Return `{ "status": "published", "externalId": "POST_ID" }` only after the platform confirms a real post ID. Return `{ "status": "failed", "error": "CLEAR_REASON" }` only when no platform post was created. The ID must be a nonempty string of at most 200 characters. Make's default `200 Accepted` response is **not** proof of publication; Orbact treats it as `needs_review`. HTTP errors, timeouts, invalid JSON, and missing IDs also become `needs_review` because the platform may have accepted the post.
+The app waits at most 15 seconds for a definitive JSON response. Return `{ "status": "published", "externalId": "POST_ID" }` only after the platform confirms a real post ID. Return `{ "status": "failed", "error": "CLEAR_REASON" }` only when no platform post was created. The ID must be a nonempty string of at most 200 characters. Make's default `200 Accepted` response is **not** proof of publication; Orbact treats it as `needs_review`. HTTP errors, timeouts, invalid JSON, and missing IDs also become `needs_review` because the platform may have accepted the post.
 
 ## Request body
 

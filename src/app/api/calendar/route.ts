@@ -184,14 +184,18 @@ export async function POST(req: NextRequest) {
   }
   if (publishNow && publisherUrl) {
     const allowed = managedPublishingPlatforms()
-    const results = await Promise.all(data.map(async (inserted) => {
+    const results = []
+    for (const inserted of data) {
       const { data: claimed, error: claimError } = await admin.from('publish_queue')
         .update({ status: 'publishing', dispatched_at: new Date().toISOString() })
         .eq('id', inserted.id).eq('user_id', user.id).eq('status', 'queued')
         .select('id,user_id,platform,content,thread,media_url,scheduled_at').single()
-      if (claimError || !claimed) return { id: inserted.id, status: 'queued' }
-      return dispatchClaimedJob(admin, claimed as PublishingJob, allowed, publisherUrl, process.env.MAKE_WEBHOOK_API_KEY!)
-    }))
+      if (claimError || !claimed) {
+        results.push({ id: inserted.id, status: 'queued' })
+        continue
+      }
+      results.push(await dispatchClaimedJob(admin, claimed as PublishingJob, allowed, publisherUrl, process.env.MAKE_WEBHOOK_API_KEY!))
+    }
     return NextResponse.json({ items: results }, { status: 201 })
   }
   return NextResponse.json({ id: data[0].id, items: data }, { status: 201 })

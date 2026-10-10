@@ -28,11 +28,15 @@ export async function GET(req: NextRequest) {
     .eq('status', 'publishing').lt('dispatched_at', stale)
   if (staleError) return NextResponse.json({ error: 'Could not reconcile publishing jobs' }, { status: 503 })
 
-  const { data, error: claimError } = await admin.rpc('claim_due_posts', { p_limit: 4 })
+  // The dedicated Make scenario handles one webhook execution at a time. Sending
+  // a batch concurrently can return its default "Accepted" before a receipt is
+  // available, leaving otherwise successful posts in an uncertain state.
+  const { data, error: claimError } = await admin.rpc('claim_due_posts', { p_limit: 3 })
   if (claimError) return NextResponse.json({ error: 'Could not claim publishing jobs' }, { status: 503 })
   const jobs = (data ?? []) as PublishingJob[]
-  const results = await Promise.all(jobs.map((job) =>
-    dispatchClaimedJob(admin, job, allowedPlatforms, url, process.env.MAKE_WEBHOOK_API_KEY!)
-  ))
+  const results = []
+  for (const job of jobs) {
+    results.push(await dispatchClaimedJob(admin, job, allowedPlatforms, url, process.env.MAKE_WEBHOOK_API_KEY!))
+  }
   return NextResponse.json({ processed: results })
 }
