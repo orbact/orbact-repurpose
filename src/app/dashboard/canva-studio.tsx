@@ -1,7 +1,6 @@
 'use client'
 
-import Image from 'next/image'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import type { GeneratedContent } from '@/lib/ai/content-schema'
 import { canvaSlideCopy } from '@/lib/canva-handoff'
 
@@ -12,25 +11,9 @@ const TEMPLATES = [
   { id: 'EAG65-M5qbY', name: 'Modern LinkedIn', detail: 'Black and white · 6 pages · LinkedIn 4:5', className: 'from-[#181818] via-[#303949] to-[#111111]' },
 ] as const
 
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = filename
-  anchor.click()
-  window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
-}
-
-export default function CanvaStudio({ outputs, aiEnabled }: { outputs: GeneratedContent; aiEnabled: boolean }) {
+export default function CanvaStudio({ outputs }: { outputs: GeneratedContent }) {
   const [selected, setSelected] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [prompt, setPrompt] = useState(outputs.image_prompt || `Abstract editorial illustration of ${outputs.carousel.cover.headline}, cyan light on charcoal, open space for headline, no words or logos.`)
-  const [artUrl, setArtUrl] = useState<string | null>(null)
-  const [artType, setArtType] = useState('image/jpeg')
-  const [busy, setBusy] = useState(false)
-  const artUrlRef = useRef<string | null>(null)
-
-  useEffect(() => () => { if (artUrlRef.current) URL.revokeObjectURL(artUrlRef.current) }, [])
 
   async function copySlides() {
     try {
@@ -39,34 +22,6 @@ export default function CanvaStudio({ outputs, aiEnabled }: { outputs: Generated
     } catch {
       setNotice('Clipboard access failed. Copy the slide text from the cards above instead.')
     }
-  }
-
-  async function generateArt() {
-    setBusy(true)
-    setNotice(null)
-    try {
-      const response = await fetch('/api/quote-image', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }),
-      })
-      if (!response.ok) {
-        const result = await response.json().catch(() => ({}))
-        throw new Error(result.error || 'Could not generate artwork.')
-      }
-      const blob = await response.blob()
-      if (!blob.type.startsWith('image/')) throw new Error('The image provider returned invalid content.')
-      if (artUrlRef.current) URL.revokeObjectURL(artUrlRef.current)
-      artUrlRef.current = URL.createObjectURL(blob)
-      setArtUrl(artUrlRef.current)
-      setArtType(blob.type)
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Could not generate artwork.')
-    } finally { setBusy(false) }
-  }
-
-  async function downloadArt() {
-    if (!artUrl) return
-    const blob = await fetch(artUrl).then((response) => response.blob())
-    downloadBlob(blob, `orbact-background.${artType === 'image/png' ? 'png' : artType === 'image/webp' ? 'webp' : 'jpg'}`)
   }
 
   return <section className="glass-card p-6 md:p-8" aria-labelledby="canva-title">
@@ -95,19 +50,8 @@ export default function CanvaStudio({ outputs, aiEnabled }: { outputs: Generated
       <li>Replace all sample content, add the Orbact logo and ORBACT to the top safe area, set the accent to cyan, and adjust pages to fit your copy. Keep www.orbact.com and official social icons on the first and last pages only; check overlap and contrast on every page.</li>
       <li>Download a <strong className="text-white">JPG of one finished page</strong> for automatic Instagram posting, then upload it in Publish on platforms below. Download the full carousel separately for manual multi-page posting.</li>
     </ol>
-    <p className="text-xs text-muted mt-4">The current automatic LinkedIn and Facebook routes publish text only. Download the Canva visual and post it manually on those Pages or on X.</p>
+    <p className="text-xs text-muted mt-4">For a finished image without Canva, use the instant Orbact visual above. Its AI artwork can also be downloaded and added to your Canva design. LinkedIn and Facebook automatic routes currently publish text only.</p>
     <p className="text-xs text-muted mt-4">Canva editing and export happen in Canva. Its paid Autofill feature is required to populate community templates automatically; this free workflow keeps your review step.</p>
-    {aiEnabled && <div className="mt-7 border-t border-white/10 pt-6">
-      <h4 className="font-semibold">Optional AI background art</h4>
-      <p className="text-sm text-muted mt-1 mb-3">Generate artwork here, download it, and upload it into the Canva design behind your text.</p>
-      <label htmlFor="canva-art-prompt" className="sr-only">Background artwork prompt</label>
-      <textarea id="canva-art-prompt" className="input-field min-h-24 resize-y" maxLength={300} value={prompt} onChange={(event) => setPrompt(event.target.value)} />
-      <div className="flex flex-wrap gap-2 mt-3">
-        <button type="button" disabled={busy || prompt.trim().length < 12} onClick={() => void generateArt()} className="btn-secondary text-sm">{busy ? 'Generating...' : 'Generate background'}</button>
-        {artUrl && <button type="button" onClick={() => void downloadArt()} className="btn-secondary text-sm">Download background</button>}
-      </div>
-      {artUrl && <Image src={artUrl} width={640} height={640} unoptimized alt="Generated background artwork preview" className="mt-4 w-full max-w-sm rounded-xl border border-white/15" />}
-    </div>}
     {notice && <p role="status" className="text-sm text-muted mt-4">{notice}</p>}
   </section>
 }

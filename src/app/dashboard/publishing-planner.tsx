@@ -27,10 +27,11 @@ function contentFor(platform: Platform, outputs: GeneratedContent): string {
 }
 
 export default function PublishingPlanner({
-  outputs, generationId,
+  outputs, generationId, preparedImage,
 }: {
   outputs: GeneratedContent | null
   generationId: string | null
+  preparedImage: File | null
 }) {
   const [platform, setPlatform] = useState<Platform>('linkedin')
   const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>(['linkedin'])
@@ -42,6 +43,8 @@ export default function PublishingPlanner({
   const requestIds = useRef<Partial<Record<Platform, string>>>({})
   const [attemptFinished, setAttemptFinished] = useState(false)
   const [mediaUrl, setMediaUrl] = useState('')
+  const uploadedStudioImage = useRef<File | null>(null)
+  const currentPreparedImage = useRef(preparedImage)
   const [connected, setConnected] = useState<Platform[]>([])
   const [uploading, setUploading] = useState(false)
   const [items, setItems] = useState<CalendarItem[]>([])
@@ -74,6 +77,15 @@ export default function PublishingPlanner({
     return () => { live = false }
   }, [refreshKey])
 
+  useEffect(() => {
+    currentPreparedImage.current = preparedImage
+    if (uploadedStudioImage.current && uploadedStudioImage.current !== preparedImage) {
+      uploadedStudioImage.current = null
+      setMediaUrl('')
+      setNotice('The generated visual changed. Attach the new JPG before publishing to Instagram.')
+    }
+  }, [preparedImage])
+
   function selectPlatform(next: Platform) {
     setPlatform(next)
   }
@@ -95,7 +107,7 @@ export default function PublishingPlanner({
     }
   }
 
-  async function uploadImage(file: File | undefined) {
+  async function uploadImage(file: File | undefined, fromStudio = false) {
     if (!file) return
     setError(null)
     setMediaUrl('')
@@ -110,6 +122,8 @@ export default function PublishingPlanner({
       })
       const body = await response.json()
       if (!response.ok) throw new Error(body.error || 'Upload failed')
+      if (fromStudio && currentPreparedImage.current !== file) return
+      uploadedStudioImage.current = fromStudio ? file : null
       setMediaUrl(body.url)
       setNotice('Image uploaded. It is publicly accessible for Instagram publishing.')
     } catch (cause) {
@@ -352,9 +366,10 @@ export default function PublishingPlanner({
           </div>
           {needsInstagramMedia && (
             <div className="rounded-xl border border-border p-4">
-              <label htmlFor="plan-image" className="block text-sm mb-2">Finished Canva JPG — one page, under 4 MB</label>
+              <label htmlFor="plan-image" className="block text-sm mb-2">Finished post JPG — one page, under 4 MB</label>
               <input id="plan-image" type="file" accept="image/jpeg" onChange={(event) => uploadImage(event.target.files?.[0])} className="text-sm text-muted" />
-              <p className="text-xs text-muted mt-2">Automatic Instagram publishing supports one image. Publish a full Canva carousel manually. The uploaded page is stored in a public bucket so Instagram can fetch it.</p>
+              {preparedImage && <button type="button" onClick={() => void uploadImage(preparedImage, true)} disabled={uploading} className="btn-secondary text-xs mt-3">Attach generated visual</button>}
+              <p className="text-xs text-muted mt-2">Automatic Instagram publishing supports one JPG. Exported Canva carousels need manual posting. The uploaded page is stored in a public bucket so Instagram can fetch it.</p>
               {uploading && <p role="status" className="text-xs text-violet-300 mt-2">Uploading image...</p>}
               {mediaUrl && <p role="status" className="text-xs text-success mt-2">Image ready for scheduling.</p>}
             </div>
@@ -364,7 +379,7 @@ export default function PublishingPlanner({
             <button type="submit" disabled={busy || uploading || selectedPlatforms.length === 0 || (publishWhen === 'now' && attemptFinished)} className="btn-primary text-sm">{busy ? 'Processing...' : deliveryMode === 'managed' ? publishWhen === 'now' ? `Approve & publish ${selectedPlatforms.length === connected.length ? 'all ' : ''}${selectedPlatforms.length} now` : `Approve & schedule ${selectedPlatforms.length}` : `Add ${selectedPlatforms.length} to calendar`}</button>
             {attemptFinished && <button type="button" onClick={startNewPublish} className="btn-secondary text-sm">Start a new publishing request</button>}
           </div>
-          {selectedPlatforms.includes('instagram') && deliveryMode === 'manual' && <p className="text-xs text-warning">Instagram needs a finished image. Export your Canva design before publishing manually.</p>}
+          {selectedPlatforms.includes('instagram') && deliveryMode === 'manual' && <p className="text-xs text-warning">Instagram needs a finished image. Download the generated visual or export your Canva design before posting manually.</p>}
         </form>
       )}
       {!outputs && <p className="text-sm text-muted">Create or open a draft above to choose its platforms and review the posts here.</p>}
