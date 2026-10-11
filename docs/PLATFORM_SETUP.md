@@ -55,14 +55,14 @@ Current verification (September 29, 2026): the project is connected to `orbact/o
 
 References: [Vercel environment variables](https://vercel.com/docs/environment-variables), [domains](https://vercel.com/docs/domains/working-with-domains/add-a-domain).
 
-### Optional free-tier AI artwork for Image Studio
+### Optional free-tier AI artwork for Canva designs
 
-The app can always produce a branded PNG with browser rendering. AI artwork is optional and is kept behind `ENABLE_QUOTE_IMAGES=false` until a Cloudflare Workers AI account is configured. The finished social image places editable Orbact text over the generated artwork; the model is prompted to make a visual with no text or logo.
+The app opens selected Canva community templates for visual design. Cloudflare Workers AI can generate an optional background image, which the founder downloads and uploads into Canva. Canva template editing and JPG export are manual on the free plan; [Canva Autofill requires Pro or above](https://www.canva.dev/docs/apps/rest-apis/autofill-guide/). The model is prompted to make artwork with no text or logo.
 
 1. Sign in to a Cloudflare account on its Workers Free plan. Open **Workers AI > Use REST API**, create the Workers AI API token using Cloudflare's template, and copy the **Account ID**. A custom token needs `Workers AI - Read` and `Workers AI - Edit`. Keep the token private.
 2. In Vercel > Project > Settings > Environment Variables, set server-only `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_API_TOKEN` for Production. Do not prefix either with `NEXT_PUBLIC_`. The app uses Cloudflare's `@cf/black-forest-labs/flux-1-schnell` model through its REST API.
-3. First set `ENABLE_QUOTE_IMAGES=true` in a test deployment with those credentials and redeploy. Sign in, generate one image from a non-sensitive prompt, choose square and portrait layouts, check text contrast and spelling, and download each finished PNG. Confirm the image endpoint is denied to an anonymous visitor and the existing three-images-per-user-per-day limit returns a helpful error after exhaustion.
-4. If that passes, enable the same three variables in the intended Vercel Production environment and redeploy. Watch Workers AI usage in Cloudflare. Workers Free currently includes 10,000 Neurons per day across models; requests fail once the allowance is exhausted. The branded browser-only card remains available when AI artwork is unavailable.
+3. First set `ENABLE_QUOTE_IMAGES=true` in a test deployment with those credentials and redeploy. Sign in, generate one image from a non-sensitive prompt, download it, and place it behind the text in Canva. Check contrast and spelling in the finished Canva design. Confirm the image endpoint is denied to an anonymous visitor and the existing three-images-per-user-per-day limit returns a helpful error after exhaustion.
+4. If that passes, enable the same three variables in the intended Vercel Production environment and redeploy. Watch Workers AI usage in Cloudflare. Workers Free currently includes 10,000 Neurons per day across models; requests fail once the allowance is exhausted. Canva editing remains available without AI artwork.
 5. Before publishing any design, inspect the image for unwanted marks, unsafe or misleading imagery, the correct headline, readable contrast, and proper attribution. The app does not guarantee that a generated visual is suitable for every brand or platform.
 
 References: [Cloudflare REST API setup](https://developers.cloudflare.com/workers-ai/get-started/rest-api/), [FLUX.1 Schnell model](https://developers.cloudflare.com/workers-ai/models/flux-1-schnell/), [Workers AI Free allocation](https://developers.cloudflare.com/workers-ai/platform/pricing/).

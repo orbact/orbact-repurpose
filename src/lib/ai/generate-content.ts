@@ -16,6 +16,7 @@ Do not infer missed records, errors, faster delivery, cleaner data, reduced clic
 For an unlaunched idea, phrase benefits as goals ("aims to reduce manual copying") or questions ("could it reduce manual copying?"). Do not use result clauses like "while cutting manual work" or "saving time" as though the benefit has already occurred.
 Use the supplied audience, tone, offer and CTA only where they fit the source. Do not turn an unrelated source into a sales pitch.
 Write for each platform rather than shortening the same paragraph. Lead with a specific idea, give a useful takeaway, and use a natural CTA only where relevant.
+Make the opening of each platform draft meaningfully different. LinkedIn should teach a business lesson; Facebook should invite a practical conversation from the Orbact Page; Instagram should pair with a visual hook; X should work as a concise thread. Keep every draft ready for a human to review before publishing.
 Use clear language, concrete takeaways, varied sentence lengths, and a strong opening. Avoid generic AI phrases, clickbait, forced emojis, hashtags in prose, and repetitive calls to action.
 If the source lacks a detail, omit it. Never imply a platform post is already published. Include a URL only if it occurs in the source or brand brief; do not invent links.
 The image prompt must describe a visual scene or composition, with no text, logos, statistics or claims. Favor a charcoal-dark editorial image, subtle cyan or blue light, and generous shadowed space for large overlaid lettering. It is a suggestion for optional image generation, not a factual source.
@@ -41,6 +42,7 @@ X: 3-5 standalone posts, each at most 280 characters, no manual numbering, a cle
 Instagram: 60-110 words, concise hook and practical takeaway, up to two natural emojis.
 Hashtags: 5-8 specific tags as strings without #.
 Carousel: a short cover hook, 2-3 useful slides, each with a short headline, optional accent, and body under 120 characters. Closing slide should be specific to the topic and CTA.
+Carousel: one idea per slide. Keep headlines under eight words and avoid text that would need tiny type or overlap a branded header and footer.
 Image prompt: 15-45 words, visually specific, suitable for a square social image, without lettering or brand marks.
 Do not put Markdown asterisks in any field.`
 

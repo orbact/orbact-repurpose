@@ -58,7 +58,7 @@ export default async function DashboardPage({
               <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Create once. Show up everywhere.</h1>
               <p className="text-muted mt-2">Turn real source material into polished drafts you can review and publish.</p>
             </div>
-            <span className="text-xs text-muted border border-border rounded-full px-3 py-2 self-start">Private workspace</span>
+            <a href="#calendar" className="inline-flex items-center justify-center rounded-xl bg-cyan-300 px-5 py-3 text-sm font-semibold text-slate-950 transition-colors hover:bg-cyan-200 self-start">Publish on platforms ↗</a>
           </div>
           {checkout === 'success' && <p role="status" className="rounded-xl border border-success/30 bg-success/10 text-success text-sm p-4 mb-6">Checkout completed. Your plan will appear here as soon as Stripe confirms it.</p>}
           {checkout === 'cancelled' && <p role="status" className="rounded-xl border border-border bg-white/5 text-muted text-sm p-4 mb-6">Checkout was cancelled. Your current plan is unchanged.</p>}
