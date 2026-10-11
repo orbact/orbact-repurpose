@@ -1,9 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import type { GeneratedContent } from '@/lib/ai/content-schema'
-import { drawOrbactVisual, loadVisualAssets, type VisualTheme } from '@/lib/visual-template'
-import CanvaStudio from './canva-studio'
+import { postVisualCopy } from '@/lib/post-visual-copy'
 import ImageStudio from './image-studio'
 
 function download(name: string, content: string, type: string) {
@@ -13,51 +12,6 @@ function download(name: string, content: string, type: string) {
   anchor.download = name
   anchor.click()
   window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
-}
-
-function CarouselVisual({ headline, accent = '', body = '', number, closing = false, theme }: {
-  headline: string; accent?: string; body?: string; number: number; closing?: boolean; theme: VisualTheme
-}) {
-  const canvas = useRef<HTMLCanvasElement>(null)
-  const [fits, setFits] = useState(true)
-  const [renderedSignature, setRenderedSignature] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const signature = JSON.stringify([headline, accent, body, number, closing, theme])
-  const ready = renderedSignature === signature
-  useEffect(() => {
-    let active = true
-    void loadVisualAssets().then(() => {
-      if (active && canvas.current) {
-        setFits(drawOrbactVisual(canvas.current, {
-          headline, kicker: accent, body, format: 'square', layout: number === 1 ? 'split' : 'editorial',
-          footer: closing ? 'closing' : 'carousel', slideNumber: number, theme,
-        }))
-        setError(null)
-        setRenderedSignature(JSON.stringify([headline, accent, body, number, closing, theme]))
-      }
-    }).catch(() => { if (active) setError('The visual assets could not load. Refresh and try again.') })
-    return () => { active = false }
-  }, [headline, accent, body, number, closing, theme])
-
-  function save() {
-    if (!canvas.current || !ready || !fits) return
-    canvas.current.toBlob((blob) => {
-      if (!blob) { setError('Could not export this slide. Please try again.'); return }
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `orbact-carousel-${number}.png`
-      link.click()
-      window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
-    }, 'image/png')
-  }
-
-  return <div className="mt-4">
-    <canvas ref={canvas} role="img" aria-label={`Preview of Orbact carousel slide ${number}`} className="w-full aspect-square rounded-xl border border-white/10" />
-    {!fits && <p role="alert" className="text-xs text-warning mt-2">Text is too long for this design. Shorten it before downloading.</p>}
-    {error && <p role="alert" className="text-xs text-danger mt-2">{error}</p>}
-    <button type="button" onClick={save} disabled={!ready || !fits || Boolean(error)} className="text-xs text-cyan-300 hover:underline mt-3">Download slide PNG</button>
-  </div>
 }
 
 export default function OutputWorkspace({
@@ -77,7 +31,6 @@ export default function OutputWorkspace({
 }) {
   const [copied, setCopied] = useState<string | null>(null)
   const [copyError, setCopyError] = useState<string | null>(null)
-  const [carouselTheme, setCarouselTheme] = useState<VisualTheme>('dark')
 
   async function copy(key: string, value: string) {
     try {
@@ -90,6 +43,7 @@ export default function OutputWorkspace({
   }
 
   function exportMarkdown() {
+    const visual = postVisualCopy(outputs)
     const markdown = [
       '# ' + title,
       '## LinkedIn', outputs.linkedin,
@@ -98,11 +52,10 @@ export default function OutputWorkspace({
       '## Instagram', outputs.instagram_caption,
       outputs.instagram_hashtags.map((tag) => '#' + tag).join(' '),
       ...(outputs.image_prompt ? ['## Visual direction', outputs.image_prompt] : []),
-      '## Carousel',
-      'Cover: ' + outputs.carousel.cover.headline + ' ' + outputs.carousel.cover.accent,
-      ...outputs.carousel.slides.map((slide, index) =>
-        'Slide ' + (index + 2) + ': ' + slide.headline + ' ' + slide.accent + '\n' + slide.body),
-      outputs.carousel.closing ? 'Closing: ' + outputs.carousel.closing : '',
+      '## Visual copy',
+      visual.headline,
+      visual.kicker,
+      visual.body,
     ].join('\n\n')
     download('orbact-draft.md', markdown, 'text/markdown;charset=utf-8')
   }
@@ -186,59 +139,7 @@ export default function OutputWorkspace({
         </article>
       </div>
 
-      <article className="glass-card p-6 md:p-8">
-        <div className="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-          <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Ready to design</p>
-          <h3 className="text-xl font-semibold">Carousel slides</h3>
-          <p className="text-sm text-muted mt-1">Live previews and downloadable PNGs. You can also use the copy in a Canva template below.</p>
-          </div>
-          <div className="w-full sm:w-44">
-            <label htmlFor="carousel-theme" className="block text-sm text-muted mb-2">Slide theme</label>
-            <select id="carousel-theme" value={carouselTheme} onChange={(event) => setCarouselTheme(event.target.value as VisualTheme)} className="input-field">
-              <option value="dark">Dark</option><option value="light">Light</option>
-            </select>
-          </div>
-        </div>
-        <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          <div className="rounded-2xl border border-cyan-400/30 bg-[#171717] p-5 flex flex-col min-h-44">
-            <span className="text-xs uppercase tracking-widest text-[#00ecea]">Cover · 01</span>
-            <input aria-label="Cover headline" className="bg-transparent border-b border-white/15 text-lg font-bold mt-6 outline-none focus:border-cyan-400" value={outputs.carousel.cover.headline} onChange={(event) => onChange({ ...outputs, carousel: { ...outputs.carousel, cover: { ...outputs.carousel.cover, headline: event.target.value } } })} />
-            <input aria-label="Cover accent" className="bg-transparent border-b border-white/15 text-sm text-[#00ecea] mt-2 outline-none focus:border-cyan-400" value={outputs.carousel.cover.accent} onChange={(event) => onChange({ ...outputs, carousel: { ...outputs.carousel, cover: { ...outputs.carousel.cover, accent: event.target.value } } })} />
-            <CarouselVisual headline={outputs.carousel.cover.headline} accent={outputs.carousel.cover.accent} number={1} theme={carouselTheme} />
-          </div>
-          {outputs.carousel.slides.map((slide, index) => (
-            <div key={index} className="rounded-2xl border border-white/15 bg-[#171717] p-5 flex flex-col min-h-44">
-              <span className="text-xs uppercase tracking-widest text-[#00ecea]">Slide · {String(index + 2).padStart(2, '0')}</span>
-              <input aria-label={'Slide ' + (index + 2) + ' headline'} className="bg-transparent border-b border-white/15 text-lg font-bold mt-4 outline-none focus:border-cyan-400" value={slide.headline} onChange={(event) => {
-                const slides = [...outputs.carousel.slides]
-                slides[index] = { ...slide, headline: event.target.value }
-                onChange({ ...outputs, carousel: { ...outputs.carousel, slides } })
-              }} />
-              <input aria-label={'Slide ' + (index + 2) + ' accent'} className="bg-transparent border-b border-white/15 text-sm text-[#00ecea] mt-2 outline-none focus:border-cyan-400" value={slide.accent} onChange={(event) => {
-                const slides = [...outputs.carousel.slides]
-                slides[index] = { ...slide, accent: event.target.value }
-                onChange({ ...outputs, carousel: { ...outputs.carousel, slides } })
-              }} />
-              <textarea aria-label={'Slide ' + (index + 2) + ' body'} className="bg-transparent text-sm text-muted mt-3 resize-y outline-none min-h-20" value={slide.body} onChange={(event) => {
-                const slides = [...outputs.carousel.slides]
-                slides[index] = { ...slide, body: event.target.value }
-                onChange({ ...outputs, carousel: { ...outputs.carousel, slides } })
-              }} />
-              <CarouselVisual headline={slide.headline} accent={slide.accent} body={slide.body} number={index + 2} theme={carouselTheme} />
-            </div>
-          ))}
-          {outputs.carousel.closing !== undefined && (
-            <div className="rounded-2xl border border-white/15 bg-[#171717] p-5 flex flex-col min-h-44">
-              <span className="text-xs uppercase tracking-widest text-[#00ecea]">Closing · {String(outputs.carousel.slides.length + 2).padStart(2, '0')}</span>
-              <textarea aria-label="Closing slide" className="bg-transparent text-lg font-bold mt-6 resize-y outline-none min-h-28" value={outputs.carousel.closing} onChange={(event) => onChange({ ...outputs, carousel: { ...outputs.carousel, closing: event.target.value } })} />
-              <CarouselVisual headline={outputs.carousel.closing} number={outputs.carousel.slides.length + 2} closing theme={carouselTheme} />
-            </div>
-          )}
-        </div>
-      </article>
       <ImageStudio key={generationId ?? 'draft'} outputs={outputs} aiEnabled={imageGenerationEnabled} onPrepareForPublishing={onPrepareForPublishing} />
-      <CanvaStudio key={generationId ?? 'draft'} outputs={outputs} />
     </section>
   )
 }

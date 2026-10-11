@@ -5,8 +5,8 @@ Orbact Repurpose turns a source article, captioned YouTube video, or pasted text
 ## What is implemented
 
 - Brand brief, grounded generation prompt, schema validation, one correction attempt, and an atomic generation credit with refund on failure.
-- Saved drafts, editing, copy, Markdown/JSON export, and downloadable square carousel PNGs.
-- Free browser-rendered branded PNGs in square or portrait layouts, with optional Cloudflare Workers AI artwork behind a disabled-by-default switch. The finished image renders editable text over the artwork in the browser.
+- Saved drafts, editing, copy, Markdown/JSON export, and three source-aware visual concepts to select, download, or attach to Instagram.
+- Free browser-rendered branded PNGs in square or portrait formats, with optional Cloudflare Workers AI artwork. A matching Canva template can be opened for manual editing; Canva Free does not support automated template autofill.
 - Manual content calendar for LinkedIn, X, Instagram, and Facebook.
 - An optional managed publishing queue with approval, per-platform status, Instagram JPEG upload, and a Make webhook protected by Make API-key authentication. A dedicated Make scenario is saved in fail-closed mode; each platform's developer permissions and a tested publishing branch are still required before enabling automatic delivery. The manual calendar works without them.
 - Supabase authentication, gated Starter/Pro Stripe billing, agency service pages, and inquiry intake.
