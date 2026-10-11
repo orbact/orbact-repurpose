@@ -39,6 +39,8 @@ export default function PublishingPlanner({
   const requestIds = useRef<Partial<Record<Platform, string>>>({})
   const [attemptFinished, setAttemptFinished] = useState(false)
   const [mediaUrl, setMediaUrl] = useState('')
+  const uploadedStudioImage = useRef<File | null>(null)
+  const currentPreparedImage = useRef(preparedImage)
   const [connected, setConnected] = useState<Platform[]>([])
   const [uploading, setUploading] = useState(false)
   const [items, setItems] = useState<CalendarItem[]>([])
@@ -64,6 +66,15 @@ export default function PublishingPlanner({
     return () => { live = false }
   }, [refreshKey])
 
+  useEffect(() => {
+    currentPreparedImage.current = preparedImage
+    if (uploadedStudioImage.current && uploadedStudioImage.current !== preparedImage) {
+      uploadedStudioImage.current = null
+      setMediaUrl('')
+      setNotice('The Image Studio design changed. Attach the new JPEG before publishing to Instagram.')
+    }
+  }, [preparedImage])
+
   function selectPlatform(next: Platform) {
     setPlatform(next)
     if (deliveryMode === 'managed' && !connected.includes(next)) {
@@ -81,7 +92,7 @@ export default function PublishingPlanner({
     }
   }
 
-  async function uploadImage(file: File | undefined) {
+  async function uploadImage(file: File | undefined, fromStudio = false) {
     if (!file) return
     setError(null)
     setMediaUrl('')
@@ -96,6 +107,8 @@ export default function PublishingPlanner({
       })
       const body = await response.json()
       if (!response.ok) throw new Error(body.error || 'Upload failed')
+      if (fromStudio && currentPreparedImage.current !== file) return
+      uploadedStudioImage.current = fromStudio ? file : null
       setMediaUrl(body.url)
       setNotice('Image uploaded. It is publicly accessible for Instagram publishing.')
     } catch (cause) {
@@ -299,7 +312,7 @@ export default function PublishingPlanner({
             <div className="md:col-span-2 xl:col-span-4 rounded-xl border border-border p-4">
               <label htmlFor="plan-image" className="block text-sm mb-2">Instagram JPEG (under 4 MB)</label>
               <input id="plan-image" type="file" accept="image/jpeg" onChange={(event) => uploadImage(event.target.files?.[0])} className="text-sm text-muted" />
-              {preparedImage && <button type="button" onClick={() => void uploadImage(preparedImage)} disabled={uploading} className="btn-secondary text-xs mt-3">Attach finished Image Studio design</button>}
+              {preparedImage && <button type="button" onClick={() => void uploadImage(preparedImage, true)} disabled={uploading} className="btn-secondary text-xs mt-3">Attach finished Image Studio design</button>}
               <p className="text-xs text-muted mt-2">The image is stored in a public bucket so Instagram can fetch it. Avoid private or sensitive images.</p>
               {uploading && <p role="status" className="text-xs text-violet-300 mt-2">Uploading image...</p>}
               {mediaUrl && <p role="status" className="text-xs text-success mt-2">Image ready for scheduling.</p>}

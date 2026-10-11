@@ -17,7 +17,7 @@ function downloadBlob(blob: Blob, filename: string) {
 export default function ImageStudio({ outputs, aiEnabled, onPrepareForPublishing }: {
   outputs: GeneratedContent
   aiEnabled: boolean
-  onPrepareForPublishing: (file: File) => void
+  onPrepareForPublishing: (file: File | null) => void
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const objectUrl = useRef<string | null>(null)
@@ -39,6 +39,8 @@ export default function ImageStudio({ outputs, aiEnabled, onPrepareForPublishing
     const canvas = canvasRef.current
     if (!canvas) return
     let cancelled = false
+    setPrepared(false)
+    onPrepareForPublishing(null)
     setRenderReady(false)
     async function render() {
       await loadVisualAssets()
@@ -59,7 +61,7 @@ export default function ImageStudio({ outputs, aiEnabled, onPrepareForPublishing
     }
     void render().catch(() => { if (!cancelled) setError('The visual font or brand icons could not load. Refresh the page and try again.') })
     return () => { cancelled = true }
-  }, [headline, format, layout, theme, emphasisWords, generatedUrl])
+  }, [headline, format, layout, theme, emphasisWords, generatedUrl, onPrepareForPublishing])
   useEffect(() => () => { if (objectUrl.current) URL.revokeObjectURL(objectUrl.current) }, [])
 
   function downloadCard() {

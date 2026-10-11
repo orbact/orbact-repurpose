@@ -8,7 +8,7 @@ V1 publishes only for Orbact-controlled accounts. The current social account IDs
 - Immediate delivery uses stable client request IDs so a lost HTTP response can be checked without creating another post. Scheduled delivery uses the daily cron. Make must return a confirmed platform ID before the app marks a post published.
 - Instagram requires a public JPEG. Image Studio can export its finished composition as JPEG for the planner; the planner uploads it to the user's path in the Supabase `publishing` bucket. LinkedIn and Facebook Make branches currently post text only. X stays manual while the budget is zero.
 - An uncertain delivery stops in `needs_review`. The operator checks the social platform and Make receipt, then records the confirmed external ID or confirms no post exists. The app never automatically retries an uncertain delivery.
-- Keep `ENABLE_MANAGED_PUBLISHING=false` while Make is inactive or acceptance checks remain open. A successful code build alone does not authorize public posts.
+- Orbact V1 currently enables `ENABLE_MANAGED_PUBLISHING` for only the three tested founder-owned connections. Turn it off and redeploy if the dedicated Make scenario or an account connection becomes unhealthy. A successful build alone does not authorize public posts.
 
 ## V2 seams for customer accounts
 

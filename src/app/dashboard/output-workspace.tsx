@@ -85,7 +85,7 @@ export default function OutputWorkspace({
   saveNotice: string | null
   generationId: string | null
   imageGenerationEnabled: boolean
-  onPrepareForPublishing: (file: File) => void
+  onPrepareForPublishing: (file: File | null) => void
 }) {
   const [copied, setCopied] = useState<string | null>(null)
   const [copyError, setCopyError] = useState<string | null>(null)
