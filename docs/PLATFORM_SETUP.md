@@ -57,7 +57,7 @@ References: [Vercel environment variables](https://vercel.com/docs/environment-v
 
 ### Optional free-tier AI artwork for Canva designs
 
-The app renders finished Orbact visuals in the browser and opens selected Canva community templates as a separate editing path. Cloudflare Workers AI can generate optional background artwork for either path. Canva template editing and JPG export are manual on the free plan; [Canva Autofill requires Pro or above](https://www.canva.dev/docs/apps/rest-apis/autofill-guide/). The model is prompted to make artwork with no text or logo.
+The app presents three curated Canva Instagram templates and copies source-based text into the clipboard for manual placement. Cloudflare Workers AI can generate optional background artwork to upload into the chosen template. Canva template editing and JPG export are manual on the free plan; [Canva Autofill requires Pro or above](https://www.canva.dev/docs/apps/rest-apis/autofill-guide/). The model is prompted to make artwork with no text or logo.
 
 1. Sign in to a Cloudflare account on its Workers Free plan. Open **Workers AI > Use REST API**, create the Workers AI API token using Cloudflare's template, and copy the **Account ID**. A custom token needs `Workers AI - Read` and `Workers AI - Edit`. Keep the token private.
 2. In Vercel > Project > Settings > Environment Variables, set server-only `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_API_TOKEN` for Production. Do not prefix either with `NEXT_PUBLIC_`. The app uses Cloudflare's `@cf/black-forest-labs/flux-1-schnell` model through its REST API.

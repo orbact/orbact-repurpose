@@ -10,7 +10,7 @@ Updated 2026-09-29. Product direction: Repurpose is Orbact's focused content dra
 
 ## Phase 1 — useful paid product
 
-**Implemented in code:** clearer landing page and pricing, agency identity, source preview and brand brief, improved generation prompts and output validation, edit/copy/export workspace, saved history, rename/delete, carousel PNG download, email confirmation/reset/sign-out, usage renewal display, better billing feedback, service pages, contact form, legal drafts, and responsive styling.
+**Implemented in code:** clearer landing page and pricing, agency identity, source preview and brand brief, improved generation prompts and output validation, edit/copy/export workspace, saved history, rename/delete, curated Canva Instagram template selection and source-copy handoff, email confirmation/reset/sign-out, usage renewal display, better billing feedback, service pages, contact form, legal drafts, and responsive styling.
 
 **External acceptance gate:** verify real email and Google flows; evaluate representative sources with customers; inspect generated facts and platform length limits; visually test dashboard on mobile and keyboard; review legal wording for the business's actual jurisdiction.
 

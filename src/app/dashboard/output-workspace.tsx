@@ -16,7 +16,6 @@ function download(name: string, content: string, type: string) {
 
 export default function OutputWorkspace({
   outputs, onChange, title, onTitleChange, onSave, saving, saveNotice, generationId, imageGenerationEnabled,
-  onPrepareForPublishing,
 }: {
   outputs: GeneratedContent
   onChange: (outputs: GeneratedContent) => void
@@ -27,7 +26,6 @@ export default function OutputWorkspace({
   saveNotice: string | null
   generationId: string | null
   imageGenerationEnabled: boolean
-  onPrepareForPublishing: (file: File | null) => void
 }) {
   const [copied, setCopied] = useState<string | null>(null)
   const [copyError, setCopyError] = useState<string | null>(null)
@@ -139,7 +137,7 @@ export default function OutputWorkspace({
         </article>
       </div>
 
-      <ImageStudio key={generationId ?? 'draft'} outputs={outputs} aiEnabled={imageGenerationEnabled} onPrepareForPublishing={onPrepareForPublishing} />
+      <ImageStudio key={generationId ?? 'draft'} outputs={outputs} aiEnabled={imageGenerationEnabled} />
     </section>
   )
 }
