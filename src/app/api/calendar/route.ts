@@ -41,16 +41,24 @@ export async function GET() {
     .order('scheduled_at', { ascending: true })
     .limit(100)
   if (error) return NextResponse.json({ error: 'Could not load calendar' }, { status: 503 })
-  const { data: connected } = await createAdminClient().from('publishing_connections')
+  const { data: connected, error: connectionError } = await createAdminClient().from('publishing_connections')
     .select('platform').eq('user_id', user.id).eq('enabled', true)
-  const allowedPlatforms = process.env.MAKE_PUBLISH_WEBHOOK_URL && process.env.MAKE_WEBHOOK_API_KEY
-    ? managedPublishingPlatforms()
+  if (connectionError) return NextResponse.json({ error: 'Could not load publishing connections' }, { status: 503 })
+  const configuredPlatforms = managedPublishingPlatforms()
+  const credentialsPresent = Boolean(process.env.MAKE_PUBLISH_WEBHOOK_URL && process.env.MAKE_WEBHOOK_API_KEY)
+  const allowedPlatforms = credentialsPresent
+    ? configuredPlatforms
     : new Set<string>()
   return NextResponse.json({
     items: data,
     connectedPlatforms: (connected ?? [])
       .map((item) => item.platform)
       .filter((platform) => allowedPlatforms.has(platform)),
+    publishingConfiguration: {
+      enabled: configuredPlatforms.size > 0,
+      credentialsPresent,
+      connectionCount: connected?.length ?? 0,
+    },
   })
 }
 
