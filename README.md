@@ -5,8 +5,8 @@ Orbact Repurpose turns a source article, captioned YouTube video, or pasted text
 ## What is implemented
 
 - Brand brief, grounded generation prompt, schema validation, one correction attempt, and an atomic generation credit with refund on failure.
-- Saved drafts, editing, copy, Markdown/JSON export, and three curated Canva Instagram templates to choose from.
-- Source-aware copy and optional Cloudflare Workers AI artwork for the selected Canva template. Canva editing and JPG export are manual on its Free plan; upload the exported JPG for Instagram publishing.
+- Saved drafts, editing, copy, Markdown/JSON export, and three rendered Instagram design choices.
+- Source-aware copy and optional Cloudflare Workers AI artwork are filled into three Orbact templates through APITemplate.io. The chosen finished JPEG is saved in Supabase and passed to the Instagram planner. The template service's Free plan permits 50 renders and three templates per month.
 - Manual content calendar for LinkedIn, X, Instagram, and Facebook.
 - An optional managed publishing queue with approval, per-platform status, Instagram JPEG upload, and a Make webhook protected by Make API-key authentication. A dedicated Make scenario is saved in fail-closed mode; each platform's developer permissions and a tested publishing branch are still required before enabling automatic delivery. The manual calendar works without them.
 - Supabase authentication, gated Starter/Pro Stripe billing, agency service pages, and inquiry intake.
@@ -15,7 +15,7 @@ Orbact Repurpose turns a source article, captioned YouTube video, or pasted text
 
 1. Run `npm ci`.
 2. Copy `.env.example` to `.env.local` and populate your own test credentials.
-3. Apply `supabase/migrations/202609290001_core.sql` to a **test** Supabase project after reviewing its existing schema. Create the `publishing` public Storage bucket only if enabling managed Instagram publishing.
+3. Apply `supabase/migrations/202609290001_core.sql` to a **test** Supabase project after reviewing its existing schema. Create the `publishing` public Storage bucket for finished images and optional backgrounds.
 4. Run `npm run dev`, then `npm test`, `npm run lint`, and `npm run build`. Run `npm run db:check` for the configured database and `npm run ai:check` for one real model response.
 
 See [app release readiness](docs/APP_RELEASE_READINESS.md), [platform setup](docs/PLATFORM_SETUP.md), and [live billing cutover](docs/LIVE_CUTOVER.md). The current Vercel subdomain supports free prototype testing; a custom domain is optional until a later launch decision.

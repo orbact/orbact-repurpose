@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { useEffect, useRef, useState } from 'react'
 import type { GeneratedContent } from '@/lib/ai/content-schema'
 
@@ -27,10 +28,11 @@ function contentFor(platform: Platform, outputs: GeneratedContent): string {
 }
 
 export default function PublishingPlanner({
-  outputs, generationId,
+  outputs, generationId, postImageUrl,
 }: {
   outputs: GeneratedContent | null
   generationId: string | null
+  postImageUrl: string | null
 }) {
   const [platform, setPlatform] = useState<Platform>('linkedin')
   const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>(['linkedin'])
@@ -41,7 +43,8 @@ export default function PublishingPlanner({
   const [publishWhen, setPublishWhen] = useState<'now' | 'later'>('later')
   const requestIds = useRef<Partial<Record<Platform, string>>>({})
   const [attemptFinished, setAttemptFinished] = useState(false)
-  const [mediaUrl, setMediaUrl] = useState('')
+  const [manualMedia, setManualMedia] = useState<{ url: string; designUrl: string | null } | null>(null)
+  const mediaUrl = manualMedia?.designUrl === postImageUrl ? manualMedia.url : postImageUrl || ''
   const [connected, setConnected] = useState<Platform[]>([])
   const [uploading, setUploading] = useState(false)
   const [items, setItems] = useState<CalendarItem[]>([])
@@ -98,7 +101,7 @@ export default function PublishingPlanner({
   async function uploadImage(file: File | undefined) {
     if (!file) return
     setError(null)
-    setMediaUrl('')
+    setManualMedia(null)
     if (file.type !== 'image/jpeg' || file.size > 4_000_000) {
       setError('Choose a JPEG under 4 MB.')
       return
@@ -110,7 +113,7 @@ export default function PublishingPlanner({
       })
       const body = await response.json()
       if (!response.ok) throw new Error(body.error || 'Upload failed')
-      setMediaUrl(body.url)
+      setManualMedia({ url: body.url, designUrl: postImageUrl })
       setNotice('Image uploaded. It is publicly accessible for Instagram publishing.')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Image upload failed')
@@ -354,9 +357,9 @@ export default function PublishingPlanner({
             <div className="rounded-xl border border-border p-4">
               <label htmlFor="plan-image" className="block text-sm mb-2">Finished post JPG — one page, under 4 MB</label>
               <input id="plan-image" type="file" accept="image/jpeg" onChange={(event) => uploadImage(event.target.files?.[0])} className="text-sm text-muted" />
-              <p className="text-xs text-muted mt-2">Export the selected Canva template as a JPG, then choose it here. Automatic Instagram publishing supports one JPG. The uploaded image is stored in a public bucket so Instagram can fetch it.</p>
+              <p className="text-xs text-muted mt-2">The selected finished design is added automatically. You can choose another JPG here. Instagram supports one JPG per post; it is stored in a public bucket so Instagram can fetch it.</p>
               {uploading && <p role="status" className="text-xs text-violet-300 mt-2">Uploading image...</p>}
-              {mediaUrl && <p role="status" className="text-xs text-success mt-2">Image ready for scheduling.</p>}
+              {mediaUrl && <div className="mt-3 flex items-start gap-3"><Image unoptimized src={mediaUrl} alt="Instagram image selected for publishing" width={96} height={120} className="h-30 w-24 rounded-lg border border-white/10 object-cover" /><p role="status" className="text-xs text-success">{mediaUrl === postImageUrl ? 'Selected Orbact design ready for publishing.' : 'Uploaded image ready for publishing.'}</p></div>}
             </div>
           )}
           {deliveryMode === 'managed' && <p className="text-xs text-warning">Your click approves the exact copy and media for every selected platform. Scheduled posts on this free prototype are checked once daily around 12:00–13:00 UTC and may wait until the next day.</p>}
@@ -364,7 +367,7 @@ export default function PublishingPlanner({
             <button type="submit" disabled={busy || uploading || selectedPlatforms.length === 0 || (publishWhen === 'now' && attemptFinished)} className="btn-primary text-sm">{busy ? 'Processing...' : deliveryMode === 'managed' ? publishWhen === 'now' ? `Approve & publish ${selectedPlatforms.length === connected.length ? 'all ' : ''}${selectedPlatforms.length} now` : `Approve & schedule ${selectedPlatforms.length}` : `Add ${selectedPlatforms.length} to calendar`}</button>
             {attemptFinished && <button type="button" onClick={startNewPublish} className="btn-secondary text-sm">Start a new publishing request</button>}
           </div>
-          {selectedPlatforms.includes('instagram') && deliveryMode === 'manual' && <p className="text-xs text-warning">Instagram needs a finished image. Export your Canva design before posting manually.</p>}
+          {selectedPlatforms.includes('instagram') && deliveryMode === 'manual' && <p className="text-xs text-warning">Instagram needs a finished image. Use the selected design above or your own JPEG when posting manually.</p>}
         </form>
       )}
       {!outputs && <p className="text-sm text-muted">Create or open a draft above to choose its platforms and review the posts here.</p>}

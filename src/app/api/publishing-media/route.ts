@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { managedPublishingPlatforms } from '@/lib/publishing-config'
+import { publishingMediaRateLimit } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
 
@@ -12,10 +12,6 @@ export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!managedPublishingPlatforms().has('instagram') ||
-      !process.env.MAKE_PUBLISH_WEBHOOK_URL || !process.env.MAKE_WEBHOOK_API_KEY) {
-    return NextResponse.json({ error: 'Managed publishing is unavailable.' }, { status: 503 })
-  }
   const sizeHeader = req.headers.get('content-length')
   const declaredSize = sizeHeader === null ? null : Number(sizeHeader)
   if (req.headers.get('content-type') !== 'image/jpeg' ||
@@ -41,6 +37,8 @@ export async function POST(req: NextRequest) {
       image[image.length - 2] !== 0xff || image[image.length - 1] !== 0xd9) {
     return NextResponse.json({ error: 'The file is not a valid JPEG.' }, { status: 400 })
   }
+  const { success } = await publishingMediaRateLimit.limit(user.id)
+  if (!success) return NextResponse.json({ error: 'Image upload limit reached. Try again tomorrow.' }, { status: 429 })
   const path = `${user.id}/${randomUUID()}.jpg`
   const admin = createAdminClient()
   const { error } = await admin.storage.from('publishing').upload(path, image, {

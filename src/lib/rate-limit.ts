@@ -30,6 +30,21 @@ export const quoteImageRateLimit = new Ratelimit({
   ephemeralCache: false,
 })
 
+// shortcut: shared rolling quota protects the provider's 50-render free plan; sync provider usage before customer V2.
+export const postDesignRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(45, '30 d'),
+  prefix: `${prefix}:post-design`,
+  ephemeralCache: false,
+})
+
+export const publishingMediaRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(20, '1 d'),
+  prefix: `${prefix}:publishing-media`,
+  ephemeralCache: false,
+})
+
 // Tighter — checkout/portal spam is a different risk profile (Stripe API abuse)
 export const billingRateLimit = new Ratelimit({
   redis,

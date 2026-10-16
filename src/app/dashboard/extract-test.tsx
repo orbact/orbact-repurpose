@@ -16,14 +16,16 @@ const DEFAULT_BRIEF: GenerationBrief = {
   bannedClaims: '',
 }
 
-export default function ExtractTest({ initialBrief, imageGenerationEnabled }: {
+export default function ExtractTest({ initialBrief, imageGenerationEnabled, postDesignEnabled }: {
   initialBrief: GenerationBrief | null
   imageGenerationEnabled: boolean
+  postDesignEnabled: boolean
 }) {
   const [type, setType] = useState<'url' | 'text' | 'youtube'>('url')
   const [input, setInput] = useState('')
   const [extracted, setExtracted] = useState<ExtractResult | null>(null)
   const [outputs, setOutputs] = useState<GeneratedContent | null>(null)
+  const [postImageUrl, setPostImageUrl] = useState<string | null>(null)
   const [brief, setBrief] = useState<GenerationBrief>(initialBrief ?? DEFAULT_BRIEF)
   const [brandNotice, setBrandNotice] = useState<string | null>(null)
   const [generationId, setGenerationId] = useState<string | null>(null)
@@ -66,6 +68,7 @@ export default function ExtractTest({ initialBrief, imageGenerationEnabled }: {
     setError(null)
     setExtracted(null)
     setOutputs(null)
+    setPostImageUrl(null)
     setGenerationId(null)
     setRequestId(null)
     setSaveNotice(null)
@@ -101,6 +104,7 @@ export default function ExtractTest({ initialBrief, imageGenerationEnabled }: {
     setLoading('generating')
     setError(null)
     setOutputs(null)
+    setPostImageUrl(null)
     setSaveNotice(null)
     try {
       const res = await fetch('/api/generate', {
@@ -262,6 +266,7 @@ export default function ExtractTest({ initialBrief, imageGenerationEnabled }: {
 
         <HistoryPanel refreshKey={historyKey} onOpen={(item) => {
           setOutputs(item.outputs)
+          setPostImageUrl(null)
           setGenerationId(item.id)
           setDraftTitle(item.title)
           setSaveNotice(null)
@@ -269,10 +274,10 @@ export default function ExtractTest({ initialBrief, imageGenerationEnabled }: {
         }} />
       </div>
 
-      {outputs && <OutputWorkspace outputs={outputs} imageGenerationEnabled={imageGenerationEnabled} onChange={(next) => { setOutputs(next); setSaveNotice(null) }}
+      {outputs && <OutputWorkspace outputs={outputs} imageGenerationEnabled={imageGenerationEnabled} postDesignEnabled={postDesignEnabled} onPostImageSelected={setPostImageUrl} onChange={(next) => { setOutputs(next); setSaveNotice(null) }}
         title={draftTitle} onTitleChange={(next) => { setDraftTitle(next); setSaveNotice(null) }}
         onSave={saveEdits} saving={saving} saveNotice={saveNotice} generationId={generationId} />}
-      <PublishingPlanner key={generationId ?? 'no-draft'} outputs={outputs} generationId={generationId} />
+      <PublishingPlanner key={generationId ?? 'no-draft'} outputs={outputs} generationId={generationId} postImageUrl={postImageUrl} />
     </div>
   )
 }

@@ -112,6 +112,7 @@ export default async function DashboardPage({
           <ExtractTest
             initialBrief={parseGenerationBrief(profile?.brand_brief)}
             imageGenerationEnabled={process.env.ENABLE_QUOTE_IMAGES === 'true' && Boolean(process.env.CLOUDFLARE_AI_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID)}
+            postDesignEnabled={Boolean(process.env.APITEMPLATE_API_KEY && process.env.APITEMPLATE_EDITORIAL_ID && process.env.APITEMPLATE_SERVICES_ID && process.env.APITEMPLATE_TECHNOLOGY_ID)}
           />
         </div>
       </div>
