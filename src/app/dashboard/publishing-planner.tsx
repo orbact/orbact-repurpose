@@ -46,6 +46,7 @@ export default function PublishingPlanner({
   const [manualMedia, setManualMedia] = useState<{ url: string; designUrl: string | null } | null>(null)
   const mediaUrl = manualMedia?.designUrl === postImageUrl ? manualMedia.url : postImageUrl || ''
   const [connected, setConnected] = useState<Platform[]>([])
+  const [connectionsLoading, setConnectionsLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [items, setItems] = useState<CalendarItem[]>([])
   const [reviewIds, setReviewIds] = useState<Record<string, string>>({})
@@ -64,6 +65,7 @@ export default function PublishingPlanner({
         if (live) {
           setItems(body.items)
           setConnected(body.connectedPlatforms || [])
+          setConnectionsLoading(false)
           if (!connectionsLoaded.current && body.connectedPlatforms?.length) {
             const first = PLATFORMS.find((item) => body.connectedPlatforms.includes(item))!
             setDeliveryMode('managed')
@@ -73,7 +75,7 @@ export default function PublishingPlanner({
           connectionsLoaded.current = true
         }
       })
-      .catch((cause) => { if (live) setError(cause.message) })
+      .catch((cause) => { if (live) { setConnectionsLoading(false); setError(cause.message) } })
     return () => { live = false }
   }, [refreshKey])
 
@@ -278,7 +280,7 @@ export default function PublishingPlanner({
             <h2 className="text-2xl md:text-3xl font-semibold tracking-tight" style={{ fontFamily: 'Orbact Display, sans-serif' }}>Publish on platforms</h2>
             <p className="text-sm text-muted mt-2 max-w-2xl">Choose your channels, review each version, then publish now or schedule. Nothing is sent until you approve it below.</p>
           </div>
-          <span className="text-xs rounded-full border border-cyan-300/25 bg-cyan-300/10 px-3 py-2 text-cyan-100">{connected.length} automatic connection{connected.length === 1 ? '' : 's'}</span>
+          <span className="text-xs rounded-full border border-cyan-300/25 bg-cyan-300/10 px-3 py-2 text-cyan-100" role="status">{connectionsLoading ? 'Checking connections…' : `${connected.length} automatic connection${connected.length === 1 ? '' : 's'}`}</span>
         </div>
       </div>
       <div className="p-6 md:p-8">
