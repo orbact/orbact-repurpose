@@ -36,6 +36,11 @@ export default function ImageStudio({ outputs, aiEnabled, designEnabled, onSelec
     onSelectImage(null)
   }
 
+  function clearTechnologyRender() {
+    setImages((current) => { const next = { ...current }; delete next.technology; return next })
+    if (selected === 'technology') { setSelected(null); onSelectImage(null) }
+  }
+
   async function renderDesign(design: PostDesignId) {
     const response = await fetch('/api/render-post', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -87,7 +92,7 @@ export default function ImageStudio({ outputs, aiEnabled, designEnabled, onSelec
     const result = await response.json()
     if (!response.ok || typeof result.url !== 'string') throw new Error(result.error || 'Could not save the artwork.')
     setArtworkUrl(result.url)
-    clearRenders()
+    clearTechnologyRender()
     setNotice('Artwork ready. Create the Technology image design to see it beside the text.')
   }
 
@@ -109,8 +114,8 @@ export default function ImageStudio({ outputs, aiEnabled, designEnabled, onSelec
       artworkObjectUrl.current = URL.createObjectURL(blob)
       setArtworkPreview(artworkObjectUrl.current)
       setArtworkUrl('')
-      clearRenders()
-      setNotice('Artwork generated. Add it as the background before rendering the designs.')
+      clearTechnologyRender()
+      setNotice('Artwork generated. Use it as the Technology image background before rendering that design.')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not generate artwork.')
     } finally { setArtBusy(false) }
